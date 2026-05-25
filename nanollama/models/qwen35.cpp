@@ -169,75 +169,62 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
     return true;
 }
 
-// recurrent (gated DeltaNet) layer — single sequence (n_seqs = 1)
+// recurrent (gated DeltaNet) layer — batched over sl.n_stream sequences of sl.n_q tokens each,
+// each reading/writing its own slot in the conv/delta state cache (s0 + stream).
 static ggml_tensor * build_recurrent(ggml_context * ctx, ggml_cgraph * gf, const qwen35_model & m,
                                      const qwen35_layer & L, ggml_tensor * cur,
-                                     ggml_tensor * conv_state, ggml_tensor * ssm_state) {
-    const int     hk      = m.d_state;            // head_k_dim == head_v_dim
-    const int     nkh     = m.n_group;            // K heads
-    const int     nvh     = m.dt_rank;            // V heads
-    const int     hv      = m.d_inner / nvh;       // head_v_dim
-    const int     conv_ch = m.conv_channels();
-    const int     dc      = m.d_conv;
-    const float   eps     = m.hparams.rms_eps;
-    const int64_t n_tokens = cur->ne[1];
+                                     ggml_tensor * conv_cache, ggml_tensor * ssm_cache, const StreamLayout & sl) {
+    const int    hk = m.d_state, nkh = m.n_group, nvh = m.dt_rank, hv = m.d_inner / nvh;
+    const int    conv_ch = m.conv_channels(), dc = m.d_conv;
+    const int    ns = sl.n_stream, nq = sl.n_q;   // n_tokens = ns * nq, token-major by stream
+    const int    er = m.n_embd_r(), es = m.n_embd_s();
+    const float  eps = m.hparams.rms_eps;
+    const size_t cnb = conv_cache->nb[1], snb = ssm_cache->nb[1], coff = (size_t) sl.s0 * cnb, soff = (size_t) sl.s0 * snb;
 
     // projections + gates
-    ggml_tensor * qkv = ggml_reshape_3d(ctx, linear(ctx, L.wqkv, cur), conv_ch, n_tokens, 1);
+    ggml_tensor * qkv = ggml_reshape_3d(ctx, linear(ctx, L.wqkv, cur), conv_ch, nq, ns);
     ggml_tensor * z   = linear(ctx, L.wqkv_gate, cur);
+    ggml_tensor * beta = ggml_sigmoid(ctx, ggml_reshape_4d(ctx, linear(ctx, L.ssm_beta, cur), 1, nvh, nq, ns));
+    ggml_tensor * alpha = ggml_reshape_3d(ctx, linear(ctx, L.ssm_alpha, cur), nvh, nq, ns);
+    ggml_tensor * gate  = ggml_reshape_4d(ctx,
+        ggml_mul(ctx, ggml_softplus(ctx, ggml_add(ctx, alpha, L.ssm_dt)), L.ssm_a), 1, nvh, nq, ns);
 
-    ggml_tensor * beta = ggml_reshape_4d(ctx, linear(ctx, L.ssm_beta, cur), 1, nvh, n_tokens, 1);
-    beta = ggml_sigmoid(ctx, beta);
-
-    ggml_tensor * alpha = ggml_reshape_3d(ctx, linear(ctx, L.ssm_alpha, cur), nvh, n_tokens, 1);
-    ggml_tensor * gate  = ggml_mul(ctx, ggml_softplus(ctx, ggml_add(ctx, alpha, L.ssm_dt)), L.ssm_a);
-    gate = ggml_reshape_4d(ctx, gate, 1, nvh, n_tokens, 1);
-
-    // causal short conv over [prev conv state | qkv], then write back the last (dc-1) frames
-    ggml_tensor * conv_states = ggml_reshape_3d(ctx, conv_state, dc - 1, conv_ch, 1);
-    ggml_tensor * conv_input  = ggml_concat(ctx, conv_states, ggml_transpose(ctx, qkv), 0);
+    // causal short conv over [prev per-stream conv state | qkv], write back the last (dc-1) frames
+    ggml_tensor * conv_prev  = ggml_reshape_3d(ctx, ggml_view_2d(ctx, conv_cache, er, ns, cnb, coff), dc - 1, conv_ch, ns);
+    ggml_tensor * conv_input = ggml_concat(ctx, conv_prev, ggml_transpose(ctx, qkv), 0);   // [dc-1+nq, conv_ch, ns]
     {
-        const int64_t s_idx     = conv_input->ne[0] - (dc - 1);
-        ggml_tensor * last      = ggml_view_3d(ctx, conv_input, dc - 1, conv_ch, 1,
-                                               conv_input->nb[1], conv_input->nb[2],
-                                               ggml_row_size(conv_input->type, s_idx));
-        ggml_tensor * dst       = ggml_view_2d(ctx, conv_state, m.n_embd_r(), 1, conv_state->nb[1], 0);
-        ggml_build_forward_expand(gf, ggml_cpy(ctx, last, dst));
+        ggml_tensor * last = ggml_view_3d(ctx, conv_input, dc - 1, conv_ch, ns,
+                                          conv_input->nb[1], conv_input->nb[2], ggml_row_size(conv_input->type, nq));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx, last, ggml_view_2d(ctx, conv_cache, er, ns, cnb, coff)));
     }
-    ggml_tensor * conv_out = ggml_silu(ctx, ggml_ssm_conv(ctx, conv_input, L.ssm_conv1d));
+    ggml_tensor * conv_out = ggml_silu(ctx, ggml_ssm_conv(ctx, conv_input, L.ssm_conv1d));   // [conv_ch, nq, ns]
 
-    // split conv output into q/k/v and L2-normalize q,k
+    // split conv output into q/k/v; L2-normalize q,k
     const size_t nb1 = ggml_row_size(conv_out->type, conv_ch);
-    ggml_tensor * q = ggml_view_4d(ctx, conv_out, hk, nkh, n_tokens, 1,
-                                   ggml_row_size(conv_out->type, hk), nb1, nb1 * n_tokens, 0);
-    ggml_tensor * k = ggml_view_4d(ctx, conv_out, hk, nkh, n_tokens, 1,
-                                   ggml_row_size(conv_out->type, hk), nb1, nb1 * n_tokens,
-                                   ggml_row_size(conv_out->type, hk * nkh));
-    ggml_tensor * v = ggml_view_4d(ctx, conv_out, hv, nvh, n_tokens, 1,
-                                   ggml_row_size(conv_out->type, hv), nb1, nb1 * n_tokens,
-                                   ggml_row_size(conv_out->type, 2 * hk * nkh));
-    q = ggml_l2_norm(ctx, q, eps);
-    k = ggml_l2_norm(ctx, k, eps);
-    v = ggml_cont(ctx, v);
+    ggml_tensor * q = ggml_l2_norm(ctx, ggml_view_4d(ctx, conv_out, hk, nkh, nq, ns,
+                          ggml_row_size(conv_out->type, hk), nb1, nb1 * nq, 0), eps);
+    ggml_tensor * k = ggml_l2_norm(ctx, ggml_view_4d(ctx, conv_out, hk, nkh, nq, ns,
+                          ggml_row_size(conv_out->type, hk), nb1, nb1 * nq, ggml_row_size(conv_out->type, hk * nkh)), eps);
+    ggml_tensor * v = ggml_cont(ctx, ggml_view_4d(ctx, conv_out, hv, nvh, nq, ns,
+                          ggml_row_size(conv_out->type, hv), nb1, nb1 * nq, ggml_row_size(conv_out->type, 2 * hk * nkh)));
 
-    // fused gated delta net: result packs [output | new_state]
-    ggml_tensor * s3  = ggml_reshape_3d(ctx, ssm_state, hv * hv * nvh, 1, 1);
-    ggml_tensor * res = ggml_gated_delta_net(ctx, q, k, v, gate, beta, s3);
-    ggml_tensor * out = ggml_view_4d(ctx, res, hv, nvh, n_tokens, 1,
+    // fused gated delta net over the per-stream recurrent state; result packs [output | new_state]
+    ggml_tensor * state = ggml_reshape_3d(ctx, ggml_view_2d(ctx, ssm_cache, es, ns, snb, soff), hv * hv * nvh, 1, ns);
+    ggml_tensor * res = ggml_gated_delta_net(ctx, q, k, v, gate, beta, state);
+    ggml_tensor * out = ggml_view_4d(ctx, res, hv, nvh, nq, ns,
                                      ggml_row_size(res->type, hv), ggml_row_size(res->type, hv * nvh),
-                                     ggml_row_size(res->type, hv * nvh * n_tokens), 0);
-    ggml_tensor * new_state = ggml_view_4d(ctx, res, hv, hv, nvh, 1,
+                                     ggml_row_size(res->type, hv * nvh * nq), 0);
+    ggml_tensor * new_state = ggml_view_4d(ctx, res, hv, hv, nvh, ns,
                                            ggml_row_size(res->type, hv), ggml_row_size(res->type, hv * hv),
                                            ggml_row_size(res->type, hv * hv * nvh),
-                                           ggml_row_size(res->type, hv * nvh * n_tokens));
-    ggml_build_forward_expand(gf, ggml_cpy(ctx, new_state,
-        ggml_view_2d(ctx, ssm_state, m.n_embd_s(), 1, ssm_state->nb[1], 0)));
+                                           ggml_row_size(res->type, hv * nvh * nq * ns));
+    ggml_build_forward_expand(gf, ggml_cpy(ctx, new_state, ggml_view_2d(ctx, ssm_cache, es, ns, snb, soff)));
 
     // gated RMSNorm (output·silu(z)) + output projection
-    ggml_tensor * z2     = ggml_reshape_4d(ctx, z, hv, nvh, n_tokens, 1);
+    ggml_tensor * z2     = ggml_reshape_4d(ctx, z, hv, nvh, nq, ns);
     ggml_tensor * normed = gated_rms_norm(ctx, out, L.ssm_norm, z2, eps);
-    ggml_tensor * o      = linear(ctx, L.ssm_out, ggml_reshape_3d(ctx, normed, hv * nvh, n_tokens, 1));
-    return ggml_reshape_2d(ctx, o, m.hparams.n_embd, n_tokens);
+    ggml_tensor * o      = linear(ctx, L.ssm_out, ggml_reshape_3d(ctx, normed, hv * nvh, nq, ns));
+    return ggml_reshape_2d(ctx, o, m.hparams.n_embd, nq * ns);
 }
 
 // full-attention layer — fused QKV+gate projection, per-head Q/K norm, M-RoPE, gated output
@@ -280,7 +267,7 @@ ggml_tensor * qwen35_model::build_graph(ggml_context * ctx, ggml_cgraph * gf, co
 
         ggml_tensor * cur = rms_norm(ctx, inpL, L.attn_norm, eps);
         if (is_recurrent(il))
-            cur = build_recurrent(ctx, gf, *this, L, cur, rc->conv[il], rc->ssm[il]);
+            cur = build_recurrent(ctx, gf, *this, L, cur, rc->conv[il], rc->ssm[il], sl);
         else
             cur = build_attn_layer(ctx, gf, *this, L, cur, in.pos, kv, il, in.kv_idxs, in.mask, n_kv, sl, flash);
 

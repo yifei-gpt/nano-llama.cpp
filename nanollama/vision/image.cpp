@@ -29,16 +29,11 @@ static void smart_resize(int w, int h, int align, int min_px, int max_px, int & 
     }
 }
 
-bool load_and_preprocess(const std::string & path, int align, int min_px, int max_px,
-                         const float mean[3], const float std_[3], ClipImage & out) {
-    int w, h, c;
-    unsigned char * src = stbi_load(path.c_str(), &w, &h, &c, 3);   // force RGB
-    if (!src) return false;
-
+// bilinear-resize the loaded RGB image to the smart-resized size, then normalize into planar layout
+static void preprocess_rgb(const unsigned char * src, int w, int h, int align, int min_px, int max_px,
+                           const float mean[3], const float std_[3], ClipImage & out) {
     int nx, ny;
     smart_resize(w, h, align, min_px, max_px, nx, ny);
-
-    // bilinear resize (matches llama.cpp img_tool::resize_bilinear), then normalize into planar layout
     out.nx = nx; out.ny = ny;
     out.data.resize((size_t) nx * ny * 3);
     const float xr = nx > 1 ? (float) (w - 1) / (nx - 1) : 0.0f;
@@ -57,6 +52,24 @@ bool load_and_preprocess(const std::string & path, int align, int min_px, int ma
             }
         }
     }
+}
+
+bool load_and_preprocess(const std::string & path, int align, int min_px, int max_px,
+                         const float mean[3], const float std_[3], ClipImage & out) {
+    int w, h, c;
+    unsigned char * src = stbi_load(path.c_str(), &w, &h, &c, 3);
+    if (!src) return false;
+    preprocess_rgb(src, w, h, align, min_px, max_px, mean, std_, out);
+    stbi_image_free(src);
+    return true;
+}
+
+bool load_and_preprocess(const unsigned char * bytes, int n_bytes, int align, int min_px, int max_px,
+                         const float mean[3], const float std_[3], ClipImage & out) {
+    int w, h, c;
+    unsigned char * src = stbi_load_from_memory(bytes, n_bytes, &w, &h, &c, 3);
+    if (!src) return false;
+    preprocess_rgb(src, w, h, align, min_px, max_px, mean, std_, out);
     stbi_image_free(src);
     return true;
 }

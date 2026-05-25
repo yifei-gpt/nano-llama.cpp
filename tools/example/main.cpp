@@ -1,70 +1,24 @@
 // nano-cli — offline generation / chat
 #include "nanollama/nanollama.h"
-#include "nanollama/layers/sampler.h"
 #include "nanollama/vision/clip.h"
 #include "nanollama/vision/image.h"
+#include "nanollama/vision/vlm.h"
 #include "ggml.h"
 
-#include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 
 using namespace nano;
 
-// Qwen3-VL: encode the image, splice its embeddings into a ChatML prompt with M-RoPE positions,
-// then generate. Text tokens advance position by 1; image tokens get (t=base, y=base+row, x=base+col)
-// and the image consumes max(grid_w, grid_h) positions.
 static void run_multimodal(LLM & llm, ClipModel & clip, const std::string & image_path,
                            const std::string & user_text, const SamplingParams & sp, bool think) {
     ClipImage img;
     if (!load_and_preprocess(image_path, clip.align(), clip.min_px(), clip.max_px(), clip.mean, clip.std, img)) {
         fprintf(stderr, "failed to load image %s\n", image_path.c_str()); return;
     }
-    int n_img, gw, gh;
-    std::vector<float> vemb = clip_encode(clip, img, n_img, gw, gh);
-    fprintf(stderr, "image %dx%d -> %d vision tokens (%dx%d grid)\n", img.nx, img.ny, n_img, gw, gh);
-
-    const Vocab & vocab = llm.get_vocab();
-    const int     n_embd = llm.model->hparams.n_embd;
-    const float * tbl    = llm.model->embd_f32.data();
-
-    auto pretok = vocab.tokenize("<|im_start|>user\n<|vision_start|>", false, true);
-    std::string suf = "<|vision_end|>" + user_text + "<|im_end|>\n<|im_start|>assistant\n";
-    if (!think) suf += "<think>\n\n</think>\n\n";
-    auto suftok = vocab.tokenize(suf, false, true);
-
-    const int N = (int) pretok.size() + n_img + (int) suftok.size();
-    std::vector<float>   E((size_t) N * n_embd);
-    std::vector<int32_t> P((size_t) 4 * N);
-    auto emit_text = [&](int32_t T, int j, int pos) {
-        std::copy_n(tbl + (size_t) T * n_embd, n_embd, E.begin() + (size_t) j * n_embd);
-        P[j] = P[N + j] = P[2 * N + j] = pos; P[3 * N + j] = 0;
-    };
-    int p = 0, j = 0;
-    for (int32_t T : pretok) emit_text(T, j++, p++);
-    const int base = p;
-    for (int i = 0; i < n_img; i++) {
-        std::copy_n(vemb.begin() + (size_t) i * n_embd, n_embd, E.begin() + (size_t) j * n_embd);
-        P[j] = base; P[N + j] = base + i / gw; P[2 * N + j] = base + i % gw; P[3 * N + j] = 0; j++;
-    }
-    p = base + std::max(gw, gh);
-    for (int32_t T : suftok) emit_text(T, j++, p++);
-
-    Sampler sampler; sampler.init(sp);
-    const int n_vocab = llm.runner.n_vocab();
-    int32_t next = sampler.sample(llm.runner.decode_embd(E.data(), P.data(), N, 0), n_vocab);
-
-    int n_past = N;
-    for (int t = 0; t < sp.n_predict; t++) {
-        if (!sp.ignore_eos && vocab.is_eog(next)) break;
-        printf("%s", vocab.token_to_piece(next).c_str()); fflush(stdout);
-        std::vector<float> e(tbl + (size_t) next * n_embd, tbl + (size_t) (next + 1) * n_embd);
-        int32_t pos4[4] = { p, p, p, 0 };
-        next = sampler.sample(llm.runner.decode_embd(e.data(), pos4, 1, n_past), n_vocab);
-        n_past++; p++;
-    }
+    generate_vlm(llm, &clip, &img, user_text, sp, think,
+                 [](const std::string & piece) { printf("%s", piece.c_str()); fflush(stdout); });
     printf("\n");
 }
 

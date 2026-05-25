@@ -105,7 +105,7 @@ void ModelRunner::init(const Model & m, const ContextParams & cp_) {
 
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
     kv.init(m.hparams.n_layer, m.hparams.n_embd_kv(), cp.n_slots, cp.n_ctx, buft);
-    rc.init(m, buft);
+    rc.init(m, cp.n_slots, buft);
     galloc = ggml_gallocr_new(buft);
 
     dec_mem.resize(graph_mem_size(m.hparams.n_layer));
@@ -200,7 +200,8 @@ const float * ModelRunner::decode_embd(const float * embd, const int32_t * pos4,
 }
 
 const float * ModelRunner::decode_batch(const Batch & b, int s0, int n_stream, int n_q, int n_kv) {
-    const int n_tokens = (int) b.token.size();
+    // image prefill supplies embeddings (b.embd) instead of token ids, so count tokens from whichever is set
+    const int n_tokens = b.token.empty() ? (int) (b.embd.size() / model->hparams.n_embd) : (int) b.token.size();
     const int n_out    = (int) b.logit_rows.size();
     const int n_vocab  = model->hparams.n_vocab;
     const bool fa      = cp.flash_attn;
@@ -208,16 +209,20 @@ const float * ModelRunner::decode_batch(const Batch & b, int s0, int n_stream, i
     n_kv = GGML_PAD(n_kv, 256); if (n_kv > kv.n_ctx_pad) n_kv = kv.n_ctx_pad;
 
     StreamLayout sl{ n_stream, s0, n_q, kv.n_ctx_pad };
-    GraphBuild g = build(*model, kv, nullptr, n_tokens, n_kv, n_out, sl, fa, bat_mem.data());
+    GraphBuild g = build(*model, kv, &rc, n_tokens, n_kv, n_out, sl, fa, bat_mem.data());
     if (!ggml_gallocr_alloc_graph(galloc, g.gf)) NANO_ABORT("graph alloc failed");
 
-    std::vector<float> emb((size_t) model->hparams.n_embd * n_tokens);
-    fill_embd(b.token.data(), n_tokens, emb.data());
+    std::vector<float> emb;     // text path looks up token embeddings; VLM path supplies them in b.embd
+    const float * embd_src = b.embd.data();
+    if (b.embd.empty()) { emb.resize((size_t) model->hparams.n_embd * n_tokens); fill_embd(b.token.data(), n_tokens, emb.data()); embd_src = emb.data(); }
     std::vector<int64_t> kvi(n_tokens);
     for (int i = 0; i < n_tokens; i++) kvi[i] = b.kv_dst[i];
+    std::vector<int32_t> pos;   // M-RoPE positions: explicit (image) or derived from b.pos (text: (p,p,p,0))
+    if (b.mrope.empty()) fill_positions(pos, model->n_pos_per_token(), b.pos.data(), n_tokens);
+    else                 pos = b.mrope;
 
-    ggml_backend_tensor_set(g.in.embd,    emb.data(),          0, emb.size() * sizeof(float));
-    ggml_backend_tensor_set(g.in.pos,     b.pos.data(),        0, (size_t) n_tokens * sizeof(int32_t));
+    ggml_backend_tensor_set(g.in.embd,    embd_src,            0, (size_t) model->hparams.n_embd * n_tokens * sizeof(float));
+    ggml_backend_tensor_set(g.in.pos,     pos.data(),          0, pos.size() * sizeof(int32_t));
     ggml_backend_tensor_set(g.in.kv_idxs, kvi.data(),          0, (size_t) n_tokens * sizeof(int64_t));
     ggml_backend_tensor_set(g.in.out_ids, b.logit_rows.data(), 0, (size_t) n_out * sizeof(int32_t));
     set_mask(g.in.mask, fa, b.pos.data(), n_tokens, n_kv);

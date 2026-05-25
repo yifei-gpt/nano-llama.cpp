@@ -22,7 +22,15 @@ struct Slot {
     std::vector<int32_t> prompt;
     std::vector<int32_t> generated;
     int  n_past     = 0;       // tokens written to this slot's KV (= next write position)
+    int  n_prompt   = 0;       // prompt length (text: prompt.size(); image: spliced embedding count)
     bool generating = false;   // prompt fully prefilled; now in the decode loop
+
+    // VLM image prefill (Qwen3.5): precomputed spliced embeddings + M-RoPE positions; empty for text.
+    // mrope_next is the M-RoPE position of the next generated token, which diverges from n_past once an
+    // image is present (an image consumes max(grid_w,grid_h) positions but many sequence cells).
+    std::vector<float>   prompt_embd;
+    std::vector<int32_t> prompt_mrope;
+    int                  mrope_next = 0;
 
     SamplingParams sp;
     Sampler        sampler;
@@ -33,7 +41,7 @@ struct Slot {
     std::function<void(const std::string & finish_reason)> on_done;
     std::function<bool()>                                  is_cancelled;
 
-    bool prefilling() const { return active && n_past < (int) prompt.size(); }
+    bool prefilling() const { return active && n_past < n_prompt; }
     void reset();
 };
 
@@ -55,6 +63,13 @@ struct Engine {
                  std::function<void(const std::string &)> on_token,
                  std::function<void(const std::string &)> on_done,
                  std::function<bool()> is_cancelled = nullptr);
+
+    // admit a VLM image request: prefill from spliced embeddings + explicit M-RoPE (Qwen3.5)
+    Slot * admit_embd(const std::vector<float> & embd, const std::vector<int32_t> & mrope,
+                      int n_tokens, int mrope_next, const SamplingParams & sp,
+                      std::function<void(const std::string &)> on_token,
+                      std::function<void(const std::string &)> on_done,
+                      std::function<bool()> is_cancelled = nullptr);
 
     bool has_work() const;
     void step();
