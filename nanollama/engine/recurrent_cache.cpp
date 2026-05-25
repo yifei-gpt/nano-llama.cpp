@@ -6,9 +6,8 @@
 
 namespace nano {
 
-void RecurrentCache::init(const Model & m, ggml_backend_t be, ggml_backend_buffer_type_t buft) {
+void RecurrentCache::init(const Model & m, ggml_backend_buffer_type_t buft) {
     n_layer = m.hparams.n_layer;
-    backend = be;
     const int n_embd_r = m.recurrent_conv_size();
     const int n_embd_s = m.recurrent_state_size();
     if (n_embd_r <= 0) return;   // not a recurrent model

@@ -24,7 +24,6 @@ namespace gkey {
     constexpr const char * N_HEAD          = "%s.attention.head_count";
     constexpr const char * N_HEAD_KV       = "%s.attention.head_count_kv";
     constexpr const char * KEY_LEN         = "%s.attention.key_length";    // head_dim
-    constexpr const char * VAL_LEN         = "%s.attention.value_length";
     constexpr const char * RMS_EPS         = "%s.attention.layer_norm_rms_epsilon";
     constexpr const char * ROPE_FREQ_BASE  = "%s.rope.freq_base";
 

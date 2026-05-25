@@ -18,10 +18,9 @@ struct RecurrentCache {
 
     ggml_context *        ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
-    ggml_backend_t        backend = nullptr;
 
     bool active() const { return buf != nullptr; }
-    void init(const Model & m, ggml_backend_t backend, ggml_backend_buffer_type_t buft);
+    void init(const Model & m, ggml_backend_buffer_type_t buft);
     void clear();   // zero all state — call at the start of a sequence
     void free();
     ~RecurrentCache() { free(); }

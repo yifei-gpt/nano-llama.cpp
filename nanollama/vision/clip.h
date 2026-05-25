@@ -18,7 +18,7 @@ struct ClipLayer {
 };
 
 struct ClipModel {
-    int   n_embd = 0, n_layer = 0, n_head = 0, patch_size = 0, n_merge = 0, image_size = 0, proj_dim = 0;
+    int   n_embd = 0, n_layer = 0, n_head = 0, patch_size = 0, n_merge = 0, proj_dim = 0;
     float eps = 1e-6f, mean[3] = {0.5f, 0.5f, 0.5f}, std[3] = {0.5f, 0.5f, 0.5f};
 
     ggml_tensor * patch_embd_0 = nullptr, * patch_embd_1 = nullptr, * patch_bias = nullptr;

@@ -105,7 +105,7 @@ void ModelRunner::init(const Model & m, const ContextParams & cp_) {
 
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
     kv.init(m.hparams.n_layer, m.hparams.n_embd_kv(), cp.n_slots, cp.n_ctx, buft);
-    rc.init(m, backend, buft);
+    rc.init(m, buft);
     galloc = ggml_gallocr_new(buft);
 
     dec_mem.resize(graph_mem_size(m.hparams.n_layer));

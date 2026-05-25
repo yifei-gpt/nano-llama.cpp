@@ -37,7 +37,6 @@ bool clip_load(ClipModel & m, const std::string & path, int n_gpu_layers) {
     m.n_layer    = gf.u32("clip.vision.block_count");
     m.n_head     = gf.u32("clip.vision.attention.head_count");
     m.patch_size = gf.u32("clip.vision.patch_size");
-    m.image_size = gf.u32("clip.vision.image_size");
     m.proj_dim   = gf.u32("clip.vision.projection_dim");
     m.n_merge    = gf.u32("clip.vision.spatial_merge_size");
     m.eps        = gf.f32("clip.vision.attention.layer_norm_epsilon");
@@ -141,17 +140,17 @@ std::vector<float> clip_encode(ClipModel & m, const ClipImage & img, int & n_tok
     // dual conv2d patch embedding + 2x2 reorder + patch bias
     ggml_tensor * inp = ggml_add(ctx,
         ggml_conv_2d(ctx, m.patch_embd_0, inp_raw, patch, patch, 0, 0, 1, 1),
-        ggml_conv_2d(ctx, m.patch_embd_1, inp_raw, patch, patch, 0, 0, 1, 1));   // [npx, npy, ne, 1]
-    inp = ggml_permute(ctx, inp, 1, 2, 0, 3);                                    // [ne, npx, npy, 1]
-    inp = reorder_2x2(ctx, inp, ne, npx, npy);                                   // [ne, n_pos, 1]
+        ggml_conv_2d(ctx, m.patch_embd_1, inp_raw, patch, patch, 0, 0, 1, 1));
+    inp = ggml_permute(ctx, inp, 1, 2, 0, 3);
+    inp = reorder_2x2(ctx, inp, ne, npx, npy);
     inp = ggml_add(ctx, inp, m.patch_bias);
 
     // interpolated learned position embedding (48x48 grid -> npx x npy), same reorder
     const int nside = (int) std::sqrt((double) m.position_embd->ne[1]);
     ggml_tensor * pe = ggml_reshape_3d(ctx, m.position_embd, ne, nside, nside);
-    pe = ggml_permute(ctx, pe, 2, 0, 1, 3);                          // [nside, nside, ne]
+    pe = ggml_permute(ctx, pe, 2, 0, 1, 3);
     pe = ggml_interpolate(ctx, pe, npx, npy, ne, 1, GGML_SCALE_MODE_BILINEAR);
-    pe = ggml_permute(ctx, pe, 1, 2, 0, 3);                          // [ne, npx, npy]
+    pe = ggml_permute(ctx, pe, 1, 2, 0, 3);
     pe = ggml_cont_2d(ctx, pe, ne, npx * npy);
     inp = ggml_add(ctx, inp, reorder_2x2(ctx, pe, ne, npx, npy));
 
@@ -160,7 +159,7 @@ std::vector<float> clip_encode(ClipModel & m, const ClipImage & img, int & n_tok
         const auto & L = m.layers[il];
         ggml_tensor * cur = vnorm(ctx, inpL, L.ln1_w, L.ln1_b, m.eps);
 
-        ggml_tensor * qkv = ggml_add(ctx, ggml_mul_mat(ctx, L.qkv_w, cur), L.qkv_b);   // [3*ne, n_pos]
+        ggml_tensor * qkv = ggml_add(ctx, ggml_mul_mat(ctx, L.qkv_w, cur), L.qkv_b);
         ggml_tensor * Q = ggml_view_3d(ctx, qkv, dh, nh, n_pos, ggml_row_size(qkv->type, dh), qkv->nb[1], 0);
         ggml_tensor * K = ggml_view_3d(ctx, qkv, dh, nh, n_pos, ggml_row_size(qkv->type, dh), qkv->nb[1], ggml_row_size(qkv->type, ne));
         ggml_tensor * V = ggml_view_3d(ctx, qkv, dh, nh, n_pos, ggml_row_size(qkv->type, dh), qkv->nb[1], ggml_row_size(qkv->type, 2 * ne));
@@ -175,7 +174,7 @@ std::vector<float> clip_encode(ClipModel & m, const ClipImage & img, int & n_tok
         kqv = ggml_cont_2d(ctx, ggml_permute(ctx, kqv, 0, 2, 1, 3), ne, n_pos);
         cur = ggml_add(ctx, ggml_mul_mat(ctx, L.o_w, kqv), L.o_b);
 
-        inpL = ggml_add(ctx, cur, inpL);                       // residual
+        inpL = ggml_add(ctx, cur, inpL);
         cur  = vnorm(ctx, inpL, L.ln2_w, L.ln2_b, m.eps);
         cur  = ggml_add(ctx, ggml_mul_mat(ctx, L.up_w, cur), L.up_b);
         cur  = ggml_gelu(ctx, cur);
@@ -188,7 +187,7 @@ std::vector<float> clip_encode(ClipModel & m, const ClipImage & img, int & n_tok
     emb = ggml_reshape_3d(ctx, emb, ne * 4, n_pos / 4, 1);
     emb = ggml_add(ctx, ggml_mul_mat(ctx, m.mm0_w, emb), m.mm0_b);
     emb = ggml_gelu(ctx, emb);
-    emb = ggml_add(ctx, ggml_mul_mat(ctx, m.mm1_w, emb), m.mm1_b);   // [proj_dim, n_tokens]
+    emb = ggml_add(ctx, ggml_mul_mat(ctx, m.mm1_w, emb), m.mm1_b);
     ggml_set_output(emb);
     ggml_build_forward_expand(gf, emb);
 
