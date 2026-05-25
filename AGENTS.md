@@ -13,7 +13,7 @@ a ViT vision encoder for image input).
 
 | area | lines | what |
 |---|---|---|
-| `nanollama/models/` | 738 | `model.*` (base + arch dispatch), `qwen3.*`, `qwen35.*` |
+| `nanollama/models/` | 734 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
 | `nanollama/engine/` | 836 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
 | `nanollama/vision/` | 488 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
 | `nanollama/layers/` | 194 | `attention`, `ops.h`, `sampler` |
