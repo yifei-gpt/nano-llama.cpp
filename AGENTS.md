@@ -46,6 +46,8 @@ cmake --build build -j --target nano-example   # rebuild one target while iterat
 ```
 (`NANO_CUDA` is the toggle — it force-enables ggml's CUDA backend, so setting `GGML_CUDA` directly does nothing. Multiple CUDA toolkits installed? add `-DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=86`.)
 
+New `.cpp` under `nanollama/` is compiled automatically (CMake globs it with `CONFIGURE_DEPENDS`) — no build-file edit. A new tool, though, needs its name added to the `foreach(tool ...)` list in `CMakeLists.txt`.
+
 Verify **every** change:
 - **Correctness** — greedy (`--temp 0`) output and tokenizer ids must stay identical to a reference run on the same prompt; CPU and GPU should agree.
 - **Speed** — `nano-bench -ngl 99` (pp/tg) and a concurrent run against `nano-server`; a regression usually means a broken invariant below.
@@ -57,7 +59,7 @@ Verify **every** change:
 Add `nanollama/models/<arch>.{h,cpp}` mirroring `qwen3.*`:
 
 1. Define an `<arch>_hparams` struct and a model struct of weight `ggml_tensor*`s (like `qwen3_model`).
-2. `<arch>_load(model, mp)`: read hparams via `gkey`/`arch_key` from GGUF; `dup()` each tensor by its GGUF name into `ctx_meta`; allocate with `ggml_backend_alloc_ctx_tensors_from_buft`; stream the data from the file; build the host F32 embedding table (the GPU path can't `get_rows` most quant types).
+2. `<arch>_load(model, mp)`: read hparams via `gkey`/`arch_key` from GGUF; `dup()` each tensor by its GGUF name into a model context; allocate with `ggml_backend_alloc_ctx_tensors_from_buft`; stream the data from the file; build the host F32 embedding table (the GPU path can't `get_rows` most quant types).
 3. `<arch>_build_graph(...)`: write the forward pass with `layers/ops.h` (`rms_norm`, `linear`, `rope_neox`, `swiglu`) + `build_attention`, gathering the output rows at the last layer (`out_ids`) so the final norm → lm-head run only on those. Match the reference op order exactly — norm placement, RoPE type/theta, attention scale, MLP shape — or logits will silently drift.
 4. Wire it in: `LLM::load`/`Engine::load` call `qwen3_load`, and `model_runner.cpp`'s `build()` calls `qwen3_build_graph` — today both hardcode Qwen3. Add a dispatch on `general.architecture` (read into `model.arch`) to pick the right load/build pair — and relax `qwen3_load`'s guard, which currently aborts unless the arch is `qwen3`.
 5. `Vocab` is generic GGUF byte-level BPE; reuse it, but check the pretokenizer regex in `vocab.cpp` if the arch tokenizes differently.
@@ -126,4 +128,4 @@ Two execution paths share one graph builder — find the layer your change belon
 
 - **Single backend.** The whole graph runs on one backend; this is what lets ggml capture & replay a CUDA graph. Don't reintroduce a multi-backend scheduler without measuring tg speed.
 - **Host embedding lookup.** CUDA's `get_rows` can't read Q6_K, so the embedding is gathered on the host into an input tensor. Keep new graphs free of unsupported ops on the GPU path.
-- **Stable graph topology.** Graphs are rebuilt into fixed buffers (`dec_mem`/`bat_mem`) with `n_kv` padded to 256 so same-shape steps replay the captured CUDA graph. Changing shapes every step forfeits that speed.
+- **Stable graph topology.** Graphs are rebuilt into fixed buffers (`dec_mem`/`bat_mem`) so same-shape steps replay the captured CUDA graph. The shape is `n_kv` (padded to 256), plus — for batched decode — `n_stream` (active slots) and `n_q`: a steady set of running slots replays, while admitting/freeing re-captures. Changing shapes every step forfeits that speed.
