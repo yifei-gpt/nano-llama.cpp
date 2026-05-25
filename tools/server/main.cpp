@@ -189,7 +189,11 @@ int main(int argc, char ** argv) {
     std::thread worker(worker_loop);
 
     httplib::Server svr;
-    svr.set_payload_max_length(256ull << 20);   // base64 images are large
+    // a request holds its HTTP worker thread for the whole generation, so size the pool to cover every slot
+    svr.new_task_queue = [n = cp.n_slots + 8] { return new httplib::ThreadPool(n); };
+    svr.set_read_timeout(600);                   // long generations must not hit httplib's 5s default
+    svr.set_write_timeout(600);
+    svr.set_payload_max_length(256ull << 20);    // base64 images are large
     svr.set_exception_handler([](const httplib::Request &, httplib::Response & res, std::exception_ptr) {
         res.status = 400;
         res.set_content(R"({"error":"invalid request"})", "application/json");
