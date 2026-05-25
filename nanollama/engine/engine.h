@@ -2,12 +2,13 @@
 #pragma once
 
 #include "nanollama/config.h"
-#include "nanollama/models/qwen3.h"
+#include "nanollama/models/model.h"
 #include "nanollama/engine/model_runner.h"
 #include "nanollama/tokenizer/vocab.h"
 #include "nanollama/layers/sampler.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,7 @@ struct Slot {
 };
 
 struct Engine {
-    qwen3_model model;
+    std::unique_ptr<Model> model;
     ModelRunner runner;
     Vocab       vocab;
 

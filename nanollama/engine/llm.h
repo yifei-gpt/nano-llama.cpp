@@ -2,18 +2,19 @@
 #pragma once
 
 #include "nanollama/config.h"
-#include "nanollama/models/qwen3.h"
+#include "nanollama/models/model.h"
 #include "nanollama/engine/model_runner.h"
 #include "nanollama/tokenizer/vocab.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace nano {
 
 struct LLM {
-    qwen3_model model;
+    std::unique_ptr<Model> model;
     ModelRunner runner;
     Vocab       vocab;
 

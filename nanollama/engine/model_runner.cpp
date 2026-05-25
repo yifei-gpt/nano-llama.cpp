@@ -19,7 +19,7 @@ static int graph_nodes(int n_layer) { return 64 * n_layer + 128; }
 struct GraphBuild {
     ggml_context * ctx = nullptr;
     ggml_cgraph  * gf  = nullptr;
-    qwen3_inputs   in;
+    graph_inputs   in;
     ggml_tensor *  logits = nullptr;
 };
 
@@ -28,7 +28,7 @@ static size_t graph_mem_size(int n_layer) {
     return ggml_tensor_overhead() * n + ggml_graph_overhead_custom(n, false);
 }
 
-static GraphBuild build(const qwen3_model & model, KvCache & kv, int n_tokens, int n_kv,
+static GraphBuild build(const Model & model, KvCache & kv, int n_tokens, int n_kv,
                         int n_out, const StreamLayout & sl, bool flash, void * membuf) {
     GraphBuild g;
     const int n_nodes = graph_nodes(model.hparams.n_layer);
@@ -44,7 +44,7 @@ static GraphBuild build(const qwen3_model & model, KvCache & kv, int n_tokens, i
     g.in.mask    = ggml_new_tensor_4d(g.ctx, mtype, n_kv, sl.n_q, 1, sl.n_stream); ggml_set_input(g.in.mask);
     g.in.out_ids = ggml_new_tensor_1d(g.ctx, GGML_TYPE_I32, n_out);           ggml_set_input(g.in.out_ids);
 
-    g.logits = qwen3_build_graph(model, g.ctx, g.gf, g.in, kv, n_kv, sl, flash);
+    g.logits = model.build_graph(g.ctx, g.gf, g.in, kv, n_kv, sl, flash);
     ggml_set_output(g.logits);
     return g;
 }
@@ -78,7 +78,7 @@ static void set_mask(ggml_tensor * mask, bool flash, const int32_t * pos, int n_
     }
 }
 
-void ModelRunner::init(const qwen3_model & m, const ContextParams & cp_) {
+void ModelRunner::init(const Model & m, const ContextParams & cp_) {
     model = &m;
     cp = cp_;
     on_gpu = m.n_gpu_layers >= m.hparams.n_layer && m.n_gpu_layers > 0;

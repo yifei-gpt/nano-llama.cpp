@@ -1,7 +1,7 @@
 // attention.h — KV-cache store + per-stream multi-head attention
 #pragma once
 #include "ggml.h"
-#include "nanollama/models/qwen3.h"
+#include "nanollama/models/model.h"
 
 namespace nano {
 

@@ -5,7 +5,7 @@
 #include "ggml-backend.h"
 #include "ggml-alloc.h"
 #include "nanollama/config.h"
-#include "nanollama/models/qwen3.h"
+#include "nanollama/models/model.h"
 #include "nanollama/engine/kv_cache.h"
 
 #include <vector>
@@ -13,7 +13,7 @@
 namespace nano {
 
 struct ModelRunner {
-    const qwen3_model * model = nullptr;
+    const Model * model = nullptr;
     ContextParams       cp;
     bool                on_gpu = false;
 
@@ -35,7 +35,7 @@ struct ModelRunner {
         std::vector<int32_t> logit_rows;
     };
 
-    void init(const qwen3_model & model, const ContextParams & cp);
+    void init(const Model & model, const ContextParams & cp);
     void free();
     ~ModelRunner() { free(); }
 

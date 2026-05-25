@@ -12,9 +12,10 @@ void Slot::reset() {
 }
 
 void Engine::load(const ModelParams & mp, const ContextParams & cp) {
-    if (!qwen3_load(model, mp)) NANO_ABORT("model load failed");
+    model.reset(load_model(mp));
+    if (!model) NANO_ABORT("model load failed");
     vocab.load(GgufFile(mp.path));
-    runner.init(model, cp);
+    runner.init(*model, cp);
     n_ctx = cp.n_ctx;
     max_batch = cp.n_ctx;
     n_ctx_pad = runner.n_ctx_pad();

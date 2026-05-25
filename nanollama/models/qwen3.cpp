@@ -20,12 +20,6 @@
 
 namespace nano {
 
-qwen3_model::~qwen3_model() {
-    for (auto b : bufs) if (b) ggml_backend_buffer_free(b);
-    if (ctx_meta)   ggml_free(ctx_meta);
-    if (ctx_repack) ggml_free(ctx_repack);
-}
-
 static ggml_backend_buffer_type_t cpu_repack_buffer_type() {
     ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
     if (!dev) return nullptr;
@@ -187,8 +181,13 @@ bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
     return true;
 }
 
+ggml_tensor * qwen3_model::build_graph(ggml_context * ctx, ggml_cgraph * gf, const graph_inputs & in,
+                                       KvCache & kv, int n_kv, const StreamLayout & sl, bool flash) const {
+    return qwen3_build_graph(*this, ctx, gf, in, kv, n_kv, sl, flash);
+}
+
 ggml_tensor * qwen3_build_graph(const qwen3_model & model, ggml_context * ctx, ggml_cgraph * gf,
-                                const qwen3_inputs & in, KvCache & kv, int n_kv,
+                                const graph_inputs & in, KvCache & kv, int n_kv,
                                 const StreamLayout & sl, bool flash) {
     const auto & hp = model.hparams;
     const int hd = hp.head_dim, n_head = hp.n_head, n_head_kv = hp.n_head_kv;

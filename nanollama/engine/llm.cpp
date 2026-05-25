@@ -6,9 +6,10 @@
 namespace nano {
 
 void LLM::load(const ModelParams & mp, const ContextParams & cp) {
-    if (!qwen3_load(model, mp)) NANO_ABORT("model load failed");
+    model.reset(load_model(mp));
+    if (!model) NANO_ABORT("model load failed");
     vocab.load(GgufFile(mp.path));
-    runner.init(model, cp);
+    runner.init(*model, cp);
 }
 
 std::string LLM::generate(const std::vector<int32_t> & prompt_tokens,
