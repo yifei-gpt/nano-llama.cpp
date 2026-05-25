@@ -44,6 +44,7 @@ struct StreamLayout {
 };
 
 struct KvCache;
+struct RecurrentCache;
 
 // Base for every model: holds the loaded weights' backing storage and builds the forward graph.
 struct Model {
@@ -57,9 +58,16 @@ struct Model {
     std::vector<ggml_backend_buffer_t> bufs;
     int n_gpu_layers = 0;
 
+    // arch traits (overridden by hybrid/multimodal models)
+    virtual int  n_pos_per_token()     const { return 1; }       // 4 for M-RoPE models
+    virtual bool is_recurrent_layer(int) const { return false; } // gated-DeltaNet layers
+    virtual int  recurrent_conv_size() const { return 0; }       // n_embd_r (conv state / seq)
+    virtual int  recurrent_state_size()const { return 0; }       // n_embd_s (delta state / seq)
+
     virtual ~Model();
     virtual ggml_tensor * build_graph(ggml_context * ctx, ggml_cgraph * gf, const graph_inputs & in,
-                                      KvCache & kv, int n_kv, const StreamLayout & sl, bool flash) const = 0;
+                                      KvCache & kv, RecurrentCache * rc, int n_kv,
+                                      const StreamLayout & sl, bool flash) const = 0;
 };
 
 // load the model named in the GGUF, dispatching on general.architecture

@@ -24,8 +24,19 @@ namespace gkey {
     constexpr const char * N_HEAD          = "%s.attention.head_count";
     constexpr const char * N_HEAD_KV       = "%s.attention.head_count_kv";
     constexpr const char * KEY_LEN         = "%s.attention.key_length";    // head_dim
+    constexpr const char * VAL_LEN         = "%s.attention.value_length";
     constexpr const char * RMS_EPS         = "%s.attention.layer_norm_rms_epsilon";
     constexpr const char * ROPE_FREQ_BASE  = "%s.rope.freq_base";
+
+    // qwen3.5 (hybrid gated-DeltaNet + attention)
+    constexpr const char * ROPE_DIM_COUNT  = "%s.rope.dimension_count";
+    constexpr const char * ROPE_SECTIONS   = "%s.rope.dimension_sections";
+    constexpr const char * FULL_ATTN_INTERVAL = "%s.full_attention_interval";
+    constexpr const char * SSM_CONV_KERNEL = "%s.ssm.conv_kernel";
+    constexpr const char * SSM_STATE_SIZE  = "%s.ssm.state_size";
+    constexpr const char * SSM_GROUP_COUNT = "%s.ssm.group_count";
+    constexpr const char * SSM_DT_RANK     = "%s.ssm.time_step_rank";
+    constexpr const char * SSM_INNER_SIZE  = "%s.ssm.inner_size";
 
     // tokenizer
     constexpr const char * TOK_LIST        = "tokenizer.ggml.tokens";

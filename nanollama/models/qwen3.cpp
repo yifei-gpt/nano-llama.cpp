@@ -182,7 +182,8 @@ bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
 }
 
 ggml_tensor * qwen3_model::build_graph(ggml_context * ctx, ggml_cgraph * gf, const graph_inputs & in,
-                                       KvCache & kv, int n_kv, const StreamLayout & sl, bool flash) const {
+                                       KvCache & kv, RecurrentCache *, int n_kv,
+                                       const StreamLayout & sl, bool flash) const {
     return qwen3_build_graph(*this, ctx, gf, in, kv, n_kv, sl, flash);
 }
 

@@ -23,4 +23,19 @@ inline ggml_tensor * swiglu(ggml_context * ctx, ggml_tensor * gate, ggml_tensor 
     return ggml_mul(ctx, ggml_silu(ctx, gate), up);
 }
 
+// --- qwen3.5 hybrid helpers ---
+
+// interleaved multi-section RoPE (M-RoPE); for text the 4 position sections are all equal
+inline ggml_tensor * rope_mrope(ggml_context * ctx, ggml_tensor * x, ggml_tensor * pos,
+                                int n_dims, const int * sections, float freq_base, int n_ctx_orig) {
+    return ggml_rope_multi(ctx, x, pos, nullptr, n_dims, const_cast<int *>(sections),
+                           GGML_ROPE_TYPE_IMROPE, n_ctx_orig, freq_base, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+}
+
+// gated RMSNorm: rms_norm(x)·weight · silu(gate)  (the DeltaNet output norm)
+inline ggml_tensor * gated_rms_norm(ggml_context * ctx, ggml_tensor * x, ggml_tensor * weight,
+                                    ggml_tensor * gate, float eps) {
+    return ggml_mul(ctx, rms_norm(ctx, x, weight, eps), ggml_silu(ctx, gate));
+}
+
 } // namespace nano

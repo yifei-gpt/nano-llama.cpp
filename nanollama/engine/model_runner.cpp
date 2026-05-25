@@ -28,7 +28,7 @@ static size_t graph_mem_size(int n_layer) {
     return ggml_tensor_overhead() * n + ggml_graph_overhead_custom(n, false);
 }
 
-static GraphBuild build(const Model & model, KvCache & kv, int n_tokens, int n_kv,
+static GraphBuild build(const Model & model, KvCache & kv, RecurrentCache * rc, int n_tokens, int n_kv,
                         int n_out, const StreamLayout & sl, bool flash, void * membuf) {
     GraphBuild g;
     const int n_nodes = graph_nodes(model.hparams.n_layer);
@@ -38,15 +38,29 @@ static GraphBuild build(const Model & model, KvCache & kv, int n_tokens, int n_k
 
     g.in.embd    = ggml_new_tensor_2d(g.ctx, GGML_TYPE_F32, model.hparams.n_embd, n_tokens);
                                                                              ggml_set_input(g.in.embd);
-    g.in.pos     = ggml_new_tensor_1d(g.ctx, GGML_TYPE_I32, n_tokens);        ggml_set_input(g.in.pos);
+    g.in.pos     = ggml_new_tensor_1d(g.ctx, GGML_TYPE_I32, n_tokens * model.n_pos_per_token());
+                                                                             ggml_set_input(g.in.pos);
     g.in.kv_idxs = ggml_new_tensor_1d(g.ctx, GGML_TYPE_I64, n_tokens);        ggml_set_input(g.in.kv_idxs);
     ggml_type mtype = flash ? GGML_TYPE_F16 : GGML_TYPE_F32;
     g.in.mask    = ggml_new_tensor_4d(g.ctx, mtype, n_kv, sl.n_q, 1, sl.n_stream); ggml_set_input(g.in.mask);
     g.in.out_ids = ggml_new_tensor_1d(g.ctx, GGML_TYPE_I32, n_out);           ggml_set_input(g.in.out_ids);
 
-    g.logits = model.build_graph(g.ctx, g.gf, g.in, kv, n_kv, sl, flash);
+    g.logits = model.build_graph(g.ctx, g.gf, g.in, kv, rc, n_kv, sl, flash);
     ggml_set_output(g.logits);
     return g;
+}
+
+// M-RoPE position layout: [n_tokens*4] = 3 blocks of the token position + a zero block (text)
+static void fill_positions(std::vector<int32_t> & pos, int n_pos_per_token, const int32_t * tok_pos, int n_tokens) {
+    pos.resize((size_t) n_tokens * n_pos_per_token);
+    if (n_pos_per_token == 4) {
+        for (int i = 0; i < n_tokens; i++) {
+            pos[i] = pos[n_tokens + i] = pos[2 * n_tokens + i] = tok_pos[i];
+            pos[3 * n_tokens + i] = 0;
+        }
+    } else {
+        for (int i = 0; i < n_tokens; i++) pos[i] = tok_pos[i];
+    }
 }
 
 void ModelRunner::fill_embd(const int32_t * tokens, int n_tokens, float * dst) const {
@@ -91,12 +105,13 @@ void ModelRunner::init(const Model & m, const ContextParams & cp_) {
 
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
     kv.init(m.hparams.n_layer, m.hparams.n_embd_kv(), cp.n_slots, cp.n_ctx, buft);
+    rc.init(m, backend, buft);
     galloc = ggml_gallocr_new(buft);
 
     dec_mem.resize(graph_mem_size(m.hparams.n_layer));
     bat_mem.resize(graph_mem_size(m.hparams.n_layer));
     StreamLayout sl{ /*n_stream=*/1, /*s0=*/0, /*n_q=*/1, kv.n_ctx_pad };
-    GraphBuild d = build(m, kv, /*n_tokens=*/1, kv.n_ctx_pad, /*n_out=*/1, sl, cp.flash_attn, dec_mem.data());
+    GraphBuild d = build(m, kv, &rc, /*n_tokens=*/1, kv.n_ctx_pad, /*n_out=*/1, sl, cp.flash_attn, dec_mem.data());
     if (!ggml_gallocr_reserve(galloc, d.gf)) NANO_ABORT("failed to reserve graph buffer");
     ggml_free(d.ctx);
 
@@ -107,6 +122,7 @@ void ModelRunner::init(const Model & m, const ContextParams & cp_) {
 void ModelRunner::free() {
     if (galloc)  { ggml_gallocr_free(galloc); galloc = nullptr; }
     kv.free();
+    rc.free();
     if (backend) { ggml_backend_free(backend); backend = nullptr; }
 }
 
@@ -117,25 +133,27 @@ const float * ModelRunner::decode(const int32_t * tokens, int n_tokens, int n_pa
 
     int n_kv = GGML_PAD(n_past + n_tokens, 256);
     if (n_kv > kv.n_ctx_pad) n_kv = kv.n_ctx_pad;
+    if (n_past == 0) rc.clear();   // reset recurrent state at the start of a sequence
     std::vector<char> prefill_mem;
     void * membuf = single ? dec_mem.data() : (prefill_mem.resize(graph_mem_size(model->hparams.n_layer)), prefill_mem.data());
 
     StreamLayout sl{ /*n_stream=*/1, /*s0=*/0, /*n_q=*/n_tokens, kv.n_ctx_pad };
-    GraphBuild g = build(*model, kv, n_tokens, n_kv, /*n_out=*/1, sl, fa, membuf);
+    GraphBuild g = build(*model, kv, &rc, n_tokens, n_kv, /*n_out=*/1, sl, fa, membuf);
     if (!ggml_gallocr_alloc_graph(galloc, g.gf)) NANO_ABORT("graph alloc failed");
 
-    std::vector<int32_t> pos(n_tokens);
+    std::vector<int32_t> tok_pos(n_tokens), pos;
     std::vector<int64_t> kvi(n_tokens);
-    for (int i = 0; i < n_tokens; i++) { pos[i] = n_past + i; kvi[i] = n_past + i; }
+    for (int i = 0; i < n_tokens; i++) { tok_pos[i] = n_past + i; kvi[i] = n_past + i; }
+    fill_positions(pos, model->n_pos_per_token(), tok_pos.data(), n_tokens);
     const int32_t out_id = n_tokens - 1;
 
     std::vector<float> emb((size_t) model->hparams.n_embd * n_tokens);
     fill_embd(tokens, n_tokens, emb.data());
     ggml_backend_tensor_set(g.in.embd,    emb.data(), 0, emb.size() * sizeof(float));
-    ggml_backend_tensor_set(g.in.pos,     pos.data(), 0, (size_t) n_tokens * sizeof(int32_t));
+    ggml_backend_tensor_set(g.in.pos,     pos.data(), 0, pos.size() * sizeof(int32_t));
     ggml_backend_tensor_set(g.in.kv_idxs, kvi.data(), 0, (size_t) n_tokens * sizeof(int64_t));
     ggml_backend_tensor_set(g.in.out_ids, &out_id,    0, sizeof(int32_t));
-    set_mask(g.in.mask, fa, pos.data(), n_tokens, n_kv);
+    set_mask(g.in.mask, fa, tok_pos.data(), n_tokens, n_kv);
 
     if (ggml_backend_graph_compute(backend, g.gf) != GGML_STATUS_SUCCESS)
         NANO_ABORT("graph compute failed");
@@ -156,7 +174,7 @@ const float * ModelRunner::decode_batch(const Batch & b, int s0, int n_stream, i
     n_kv = GGML_PAD(n_kv, 256); if (n_kv > kv.n_ctx_pad) n_kv = kv.n_ctx_pad;
 
     StreamLayout sl{ n_stream, s0, n_q, kv.n_ctx_pad };
-    GraphBuild g = build(*model, kv, n_tokens, n_kv, n_out, sl, fa, bat_mem.data());
+    GraphBuild g = build(*model, kv, nullptr, n_tokens, n_kv, n_out, sl, fa, bat_mem.data());
     if (!ggml_gallocr_alloc_graph(galloc, g.gf)) NANO_ABORT("graph alloc failed");
 
     std::vector<float> emb((size_t) model->hparams.n_embd * n_tokens);

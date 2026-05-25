@@ -7,6 +7,7 @@
 #include "nanollama/config.h"
 #include "nanollama/models/model.h"
 #include "nanollama/engine/kv_cache.h"
+#include "nanollama/engine/recurrent_cache.h"
 
 #include <vector>
 
@@ -20,6 +21,7 @@ struct ModelRunner {
     ggml_backend_t        backend = nullptr;   // the whole model runs on this one backend
     ggml_gallocr_t        galloc  = nullptr;
     KvCache               kv;
+    RecurrentCache        rc;                  // only allocated for recurrent (hybrid) models
 
     // graphs are rebuilt into these fixed buffers each step → stable addresses → CUDA-graph replay
     std::vector<char> dec_mem;

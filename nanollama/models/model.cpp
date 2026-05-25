@@ -1,6 +1,7 @@
 // model.cpp — model base cleanup + architecture dispatch
 #include "nanollama/models/model.h"
 #include "nanollama/models/qwen3.h"
+#include "nanollama/models/qwen35.h"
 #include "nanollama/utils/gguf.h"
 #include "nanollama/common.h"
 
@@ -19,6 +20,11 @@ Model * load_model(const ModelParams & mp) {
     if (arch == "qwen3") {
         auto * m = new qwen3_model();
         if (!qwen3_load(*m, mp)) { delete m; return nullptr; }
+        return m;
+    }
+    if (arch == "qwen35") {
+        auto * m = new qwen35_model();
+        if (!qwen35_load(*m, mp)) { delete m; return nullptr; }
         return m;
     }
     NANO_ABORT("unsupported architecture '%s'", arch.c_str());

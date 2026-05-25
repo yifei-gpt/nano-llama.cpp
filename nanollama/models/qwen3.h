@@ -24,7 +24,8 @@ struct qwen3_model : Model {
     std::vector<qwen3_layer> layers;
 
     ggml_tensor * build_graph(ggml_context * ctx, ggml_cgraph * gf, const graph_inputs & in,
-                              KvCache & kv, int n_kv, const StreamLayout & sl, bool flash) const override;
+                              KvCache & kv, RecurrentCache * rc, int n_kv,
+                              const StreamLayout & sl, bool flash) const override;
 };
 
 bool qwen3_load(qwen3_model & model, const ModelParams & mp);
