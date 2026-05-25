@@ -126,43 +126,14 @@ void ModelRunner::free() {
     if (backend) { ggml_backend_free(backend); backend = nullptr; }
 }
 
+// token-id wrapper: look up embeddings + build sequential M-RoPE positions, then run decode_embd
 const float * ModelRunner::decode(const int32_t * tokens, int n_tokens, int n_past) {
-    const int n_vocab = model->hparams.n_vocab;
-    const bool single = (n_tokens == 1);
-    const bool fa = cp.flash_attn && single;
-
-    int n_kv = GGML_PAD(n_past + n_tokens, 256);
-    if (n_kv > kv.n_ctx_pad) n_kv = kv.n_ctx_pad;
-    if (n_past == 0) rc.clear();
-    std::vector<char> prefill_mem;
-    void * membuf = single ? dec_mem.data() : (prefill_mem.resize(graph_mem_size(model->hparams.n_layer)), prefill_mem.data());
-
-    StreamLayout sl{ /*n_stream=*/1, /*s0=*/0, /*n_q=*/n_tokens, kv.n_ctx_pad };
-    GraphBuild g = build(*model, kv, &rc, n_tokens, n_kv, /*n_out=*/1, sl, fa, membuf);
-    if (!ggml_gallocr_alloc_graph(galloc, g.gf)) NANO_ABORT("graph alloc failed");
-
-    std::vector<int32_t> tok_pos(n_tokens), pos;
-    std::vector<int64_t> kvi(n_tokens);
-    for (int i = 0; i < n_tokens; i++) { tok_pos[i] = n_past + i; kvi[i] = n_past + i; }
-    fill_positions(pos, model->n_pos_per_token(), tok_pos.data(), n_tokens);
-    const int32_t out_id = n_tokens - 1;
-
     std::vector<float> emb((size_t) model->hparams.n_embd * n_tokens);
     fill_embd(tokens, n_tokens, emb.data());
-    ggml_backend_tensor_set(g.in.embd,    emb.data(), 0, emb.size() * sizeof(float));
-    ggml_backend_tensor_set(g.in.pos,     pos.data(), 0, pos.size() * sizeof(int32_t));
-    ggml_backend_tensor_set(g.in.kv_idxs, kvi.data(), 0, (size_t) n_tokens * sizeof(int64_t));
-    ggml_backend_tensor_set(g.in.out_ids, &out_id,    0, sizeof(int32_t));
-    set_mask(g.in.mask, fa, tok_pos.data(), n_tokens, n_kv);
-
-    if (ggml_backend_graph_compute(backend, g.gf) != GGML_STATUS_SUCCESS)
-        NANO_ABORT("graph compute failed");
-
-    logits_buf.resize((size_t) n_vocab);
-    ggml_backend_tensor_get(g.logits, logits_buf.data(), 0, logits_buf.size() * sizeof(float));
-
-    ggml_free(g.ctx);
-    return logits_buf.data();
+    std::vector<int32_t> tok_pos(n_tokens), pos;
+    for (int i = 0; i < n_tokens; i++) tok_pos[i] = n_past + i;
+    fill_positions(pos, model->n_pos_per_token(), tok_pos.data(), n_tokens);
+    return decode_embd(emb.data(), pos.data(), n_tokens, n_past);
 }
 
 const float * ModelRunner::decode_embd(const float * embd, const int32_t * pos4, int n_tokens, int n_past) {

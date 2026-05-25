@@ -30,8 +30,4 @@ struct qwen3_model : Model {
 
 bool qwen3_load(qwen3_model & model, const ModelParams & mp);
 
-ggml_tensor * qwen3_build_graph(const qwen3_model & model, ggml_context * ctx, ggml_cgraph * gf,
-                                const graph_inputs & in, KvCache & kv, int n_kv,
-                                const StreamLayout & sl, bool flash);
-
 } // namespace nano
