@@ -166,13 +166,13 @@ std::vector<float> clip_encode(ClipModel & m, const ClipImage & img, int & n_tok
         Q = ggml_rope_multi(ctx, Q, positions, nullptr, dh / 2, sections, GGML_ROPE_TYPE_VISION, 32768, 10000.0f, 1, 0, 1, 32, 1);
         K = ggml_rope_multi(ctx, K, positions, nullptr, dh / 2, sections, GGML_ROPE_TYPE_VISION, 32768, 10000.0f, 1, 0, 1, 32, 1);
 
+        // full bidirectional self-attention via flash-attn (no mask), K/V in F16 — matches llama.cpp's clip
         ggml_tensor * q = ggml_permute(ctx, Q, 0, 2, 1, 3);
-        ggml_tensor * k = ggml_permute(ctx, K, 0, 2, 1, 3);
-        ggml_tensor * v = ggml_cont(ctx, ggml_permute(ctx, V, 1, 2, 0, 3));
-        ggml_tensor * kq = ggml_soft_max_ext(ctx, ggml_mul_mat(ctx, k, q), nullptr, kq_scale, 0.0f);
-        ggml_tensor * kqv = ggml_mul_mat(ctx, v, kq);
-        kqv = ggml_cont_2d(ctx, ggml_permute(ctx, kqv, 0, 2, 1, 3), ne, n_pos);
-        cur = ggml_add(ctx, ggml_mul_mat(ctx, L.o_w, kqv), L.o_b);
+        ggml_tensor * k = ggml_cast(ctx, ggml_permute(ctx, K, 0, 2, 1, 3), GGML_TYPE_F16);
+        ggml_tensor * v = ggml_cast(ctx, ggml_permute(ctx, V, 0, 2, 1, 3), GGML_TYPE_F16);
+        ggml_tensor * kqv = ggml_flash_attn_ext(ctx, q, k, v, nullptr, kq_scale, 0.0f, 0.0f);
+        ggml_flash_attn_ext_set_prec(kqv, GGML_PREC_F32);
+        cur = ggml_add(ctx, ggml_mul_mat(ctx, L.o_w, ggml_reshape_2d(ctx, kqv, ne, n_pos)), L.o_b);
 
         inpL = ggml_add(ctx, cur, inpL);
         cur  = vnorm(ctx, inpL, L.ln2_w, L.ln2_b, m.eps);
