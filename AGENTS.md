@@ -93,8 +93,10 @@ Add `nanollama/models/<arch>.{h,cpp}` mirroring `qwen3.*` (or `qwen35.*` for a h
    Override the traits you need: `n_pos_per_token()` (4 for M-RoPE), `is_recurrent_layer(il)`,
    `recurrent_conv_size()` / `recurrent_state_size()` (for SSM/linear-attention state).
 2. `<arch>_load(model, mp)`: read hparams via `gkey`/`arch_key` from GGUF; `dup()` each tensor by its
-   GGUF name into a model context; allocate with `ggml_backend_alloc_ctx_tensors_from_buft`; stream the
-   data from the file; build the host F32 embedding table (the GPU path can't `get_rows` most quant types).
+   GGUF name into a model context; allocate with `ggml_backend_alloc_ctx_tensors_from_buft` (GPU when
+   `cuda_available()`); stream the data from the file; then `load_embd_table(model, gf, path)` for the host
+   F32 embedding table (the GPU path can't `get_rows` most quant types). `cuda_available()` and
+   `load_embd_table()` are shared helpers in `model.cpp` — reuse them.
 3. `<arch>_model::build_graph(...)`: write the forward pass with `layers/ops.h` + `build_attention`,
    gathering the output rows at the last layer (`out_ids`) so the final norm → lm-head run only on those.
    Match the reference op order exactly — norm placement, RoPE type/theta, attention scale, MLP shape —
