@@ -73,4 +73,9 @@ struct Model {
 // load the model named in the GGUF, dispatching on general.architecture
 Model * load_model(const ModelParams & mp);
 
+// shared loader helpers (used by each arch's <arch>_load)
+struct GgufFile;
+bool cuda_available();                                                     // a usable CUDA device is present
+void load_embd_table(Model & m, GgufFile & gf, const std::string & path);  // host F32 embedding table for the lookup
+
 } // namespace nano

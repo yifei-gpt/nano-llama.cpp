@@ -31,19 +31,10 @@ static ggml_backend_buffer_type_t cpu_repack_buffer_type() {
     return nullptr;
 }
 
-static bool cuda_available() {
-#ifdef GGML_USE_CUDA
-    return ggml_backend_cuda_get_device_count() > 0;
-#else
-    return false;
-#endif
-}
-
 bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
     GgufFile gf(mp.path);
 
     model.arch = gf.str(gkey::ARCH);
-    if (model.arch != "qwen3") NANO_ABORT("nano-llama only supports qwen3, got '%s'", model.arch.c_str());
     model.name = gf.has(gkey::NAME) ? gf.str(gkey::NAME) : "qwen3";
 
     auto & hp = model.hparams;
@@ -165,18 +156,7 @@ bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
         }
     }
 
-    {
-        ggml_tensor * src = gf.tensor("token_embd.weight");
-        auto to_float = ggml_get_type_traits(src->type)->to_float;
-        if (!to_float) NANO_ABORT("token_embd type %s has no dequantizer", ggml_type_name(src->type));
-        const int64_t n = (int64_t) hp.n_vocab * hp.n_embd;
-        staging.resize(ggml_nbytes(src));
-        fin.seekg((std::streamoff) gf.tensor_file_offset("token_embd.weight"));
-        fin.read(staging.data(), (std::streamsize) ggml_nbytes(src));
-        if (!fin) NANO_ABORT("short read for embedding dequant");
-        model.embd_f32.resize(n);
-        to_float(staging.data(), model.embd_f32.data(), n);
-    }
+    load_embd_table(model, gf, mp.path);
     NANO_LOG("model: loaded %d layers%s", hp.n_layer, tied ? " (tied embeddings)" : "");
     return true;
 }
