@@ -7,7 +7,10 @@
 
 namespace nano {
 
+struct Model;
+
 // Slot s owns contiguous cells [s*n_ctx_pad, (s+1)*n_ctx_pad), viewed as a 4D per-stream tensor.
+// Only attention layers get K/V buffers; recurrent layers leave k[il]/v[il] null (no KV).
 struct KvCache {
     int n_layer    = 0;
     int n_embd_kv  = 0;
@@ -21,7 +24,7 @@ struct KvCache {
     ggml_context *          ctx = nullptr;
     ggml_backend_buffer_t   buf = nullptr;
 
-    void init(int n_layer, int n_embd_kv, int n_slots, int n_ctx, ggml_backend_buffer_type_t buft);
+    void init(const Model & model, int n_slots, int n_ctx, ggml_backend_buffer_type_t buft);
     void free();
     ~KvCache() { free(); }
 };

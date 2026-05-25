@@ -104,7 +104,7 @@ void ModelRunner::init(const Model & m, const ContextParams & cp_) {
                     ggml_backend_cpu_set_n_threads(backend, cp.n_threads); }
 
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
-    kv.init(m.hparams.n_layer, m.hparams.n_embd_kv(), cp.n_slots, cp.n_ctx, buft);
+    kv.init(m, cp.n_slots, cp.n_ctx, buft);
     rc.init(m, cp.n_slots, buft);
     galloc = ggml_gallocr_new(buft);
 
