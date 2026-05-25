@@ -1,0 +1,56 @@
+// model_runner.h — single-backend forward runner (CPU or CUDA)
+#pragma once
+
+#include "ggml.h"
+#include "ggml-backend.h"
+#include "ggml-alloc.h"
+#include "nanollama/config.h"
+#include "nanollama/models/qwen3.h"
+#include "nanollama/engine/kv_cache.h"
+
+#include <vector>
+
+namespace nano {
+
+struct ModelRunner {
+    const qwen3_model * model = nullptr;
+    ContextParams       cp;
+    bool                on_gpu = false;
+
+    ggml_backend_t        backend = nullptr;   // the whole model runs on this one backend
+    ggml_gallocr_t        galloc  = nullptr;
+    KvCache               kv;
+
+    // graphs are rebuilt into these fixed buffers each step → stable addresses → CUDA-graph replay
+    std::vector<char> dec_mem;
+    std::vector<char> bat_mem;
+
+    std::vector<float> logits_buf;
+
+    // per token: its position (pos), destination KV cell (kv_dst), and (optionally) a logit-output row
+    struct Batch {
+        std::vector<int32_t> token;
+        std::vector<int32_t> pos;
+        std::vector<int32_t> kv_dst;
+        std::vector<int32_t> logit_rows;
+    };
+
+    void init(const qwen3_model & model, const ContextParams & cp);
+    void free();
+    ~ModelRunner() { free(); }
+
+    const float * decode(const int32_t * tokens, int n_tokens, int n_past);   // single sequence
+
+    // per-stream batched forward: n_stream sequences of n_q tokens each → logits in logit_rows order
+    const float * decode_batch(const Batch & b, int s0, int n_stream, int n_q, int n_kv);
+
+    int n_ctx_pad()    const { return kv.n_ctx_pad; }
+    int scratch_cell() const { return kv.n_slots * kv.n_ctx_pad; }   // dummy-write sink, never read
+
+    int n_vocab() const { return model->hparams.n_vocab; }
+
+private:
+    void fill_embd(const int32_t * tokens, int n_tokens, float * dst) const;
+};
+
+} // namespace nano
