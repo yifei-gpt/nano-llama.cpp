@@ -21,7 +21,7 @@ void ThreadPool::worker(int id) {
         if (stop_) return;
         seen = epoch_;
         lk.unlock();
-        for (int i = id; i < n_items_; i += n_threads_) (*fn_)(i);   // fn_/n_items_ fixed for this epoch
+        for (int i = id; i < n_items_; i += n_threads_) (*fn_)(i);
         lk.lock();
         if (++finished_ == n_threads_ - 1) cv_done_.notify_one();
     }

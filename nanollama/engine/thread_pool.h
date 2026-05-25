@@ -25,8 +25,8 @@ private:
     std::condition_variable cv_start_, cv_done_;
     const std::function<void(int)> * fn_ = nullptr;
     int  n_items_  = 0;
-    int  epoch_    = 0;   // bumped on each dispatch; workers wake when it changes
-    int  finished_ = 0;   // worker threads done with the current epoch
+    int  epoch_    = 0;   // bumped per dispatch; workers wake when it changes
+    int  finished_ = 0;
     bool stop_     = false;
 };
 

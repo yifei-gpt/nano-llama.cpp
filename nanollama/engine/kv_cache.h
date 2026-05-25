@@ -16,7 +16,7 @@ struct KvCache {
     int n_embd_kv  = 0;
     int n_slots    = 0;
     int n_ctx_pad  = 0;   // per-stream cell capacity (n_ctx rounded up to a multiple of 256)
-    int n_cells    = 0;   // n_slots * n_ctx_pad
+    int n_cells    = 0;
 
     std::vector<ggml_tensor *> k;
     std::vector<ggml_tensor *> v;

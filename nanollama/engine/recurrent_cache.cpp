@@ -11,7 +11,7 @@ void RecurrentCache::init(const Model & m, int slots, ggml_backend_buffer_type_t
     n_slots = slots;
     n_embd_r = m.recurrent_conv_size();
     n_embd_s = m.recurrent_state_size();
-    if (n_embd_r <= 0) return;   // not a recurrent model
+    if (n_embd_r <= 0) return;   // dense model: no recurrent state
 
     ggml_init_params ip = { ggml_tensor_overhead() * (2 * n_layer + 4), nullptr, /*no_alloc=*/true };
     ctx = ggml_init(ip);

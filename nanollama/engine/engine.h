@@ -22,13 +22,11 @@ struct Slot {
 
     std::vector<int32_t> prompt;
     std::vector<int32_t> generated;
-    int  n_past     = 0;       // tokens written to this slot's KV (= next write position)
-    int  n_prompt   = 0;       // prompt length (text: prompt.size(); image: spliced embedding count)
-    bool generating = false;   // prompt fully prefilled; now in the decode loop
+    int  n_past     = 0;
+    int  n_prompt   = 0;
+    bool generating = false;
 
-    // VLM image prefill (Qwen3.5): precomputed spliced embeddings + M-RoPE positions; empty for text.
-    // mrope_next is the M-RoPE position of the next generated token, which diverges from n_past once an
-    // image is present (an image consumes max(grid_w,grid_h) positions but many sequence cells).
+    // VLM image prefill (Qwen3.5): spliced embeddings + M-RoPE; mrope_next diverges from n_past for images
     std::vector<float>   prompt_embd;
     std::vector<int32_t> prompt_mrope;
     int                  mrope_next = 0;
@@ -50,7 +48,7 @@ struct Engine {
     std::unique_ptr<Model> model;
     ModelRunner runner;
     Vocab       vocab;
-    std::unique_ptr<ThreadPool> pool;   // parallel per-slot sampling during decode
+    std::unique_ptr<ThreadPool> pool;
 
     std::vector<Slot> slots;
     int n_ctx = 0, max_batch = 0, n_ctx_pad = 0;
@@ -77,8 +75,8 @@ struct Engine {
     void step();
 
 private:
-    void sample_emit(Slot & s, const float * logits);   // sample one slot then emit (prefill's first token)
-    void emit_token(Slot & s, int32_t tok);              // append/stream a sampled token, finish on EOS/length
+    void sample_emit(Slot & s, const float * logits);
+    void emit_token(Slot & s, int32_t tok);
 };
 
 } // namespace nano

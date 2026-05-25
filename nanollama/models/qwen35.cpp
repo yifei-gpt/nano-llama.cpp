@@ -191,13 +191,13 @@ static ggml_tensor * build_recurrent(ggml_context * ctx, ggml_cgraph * gf, const
 
     // causal short conv over [prev per-stream conv state | qkv], write back the last (dc-1) frames
     ggml_tensor * conv_prev  = ggml_reshape_3d(ctx, ggml_view_2d(ctx, conv_cache, er, ns, cnb, coff), dc - 1, conv_ch, ns);
-    ggml_tensor * conv_input = ggml_concat(ctx, conv_prev, ggml_transpose(ctx, qkv), 0);   // [dc-1+nq, conv_ch, ns]
+    ggml_tensor * conv_input = ggml_concat(ctx, conv_prev, ggml_transpose(ctx, qkv), 0);
     {
         ggml_tensor * last = ggml_view_3d(ctx, conv_input, dc - 1, conv_ch, ns,
                                           conv_input->nb[1], conv_input->nb[2], ggml_row_size(conv_input->type, nq));
         ggml_build_forward_expand(gf, ggml_cpy(ctx, last, ggml_view_2d(ctx, conv_cache, er, ns, cnb, coff)));
     }
-    ggml_tensor * conv_out = ggml_silu(ctx, ggml_ssm_conv(ctx, conv_input, L.ssm_conv1d));   // [conv_ch, nq, ns]
+    ggml_tensor * conv_out = ggml_silu(ctx, ggml_ssm_conv(ctx, conv_input, L.ssm_conv1d));
 
     // split conv output into q/k/v; L2-normalize q,k
     const size_t nb1 = ggml_row_size(conv_out->type, conv_ch);

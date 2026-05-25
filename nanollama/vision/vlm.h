@@ -19,8 +19,8 @@ struct ClipImage;
 // Spliced prefill input for one ChatML user turn (text token embeddings + optional image embeddings),
 // with per-token M-RoPE positions. mrope_next is the M-RoPE position of the first generated token.
 struct VlmInput {
-    std::vector<float>   embd;       // [n_embd * n_tokens]
-    std::vector<int32_t> mrope;      // [4 * n_tokens]
+    std::vector<float>   embd;
+    std::vector<int32_t> mrope;
     int                  n_tokens   = 0;
     int                  mrope_next = 0;
 };

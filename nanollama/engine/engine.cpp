@@ -34,7 +34,7 @@ Slot * Engine::admit(std::vector<int32_t> prompt, const SamplingParams & sp,
                      std::function<void(const std::string &)> on_token,
                      std::function<void(const std::string &)> on_done,
                      std::function<bool()> is_cancelled) {
-    NANO_ASSERT(!prompt.empty());   // empty prompt would OOB the embedding lookup; callers must reject it
+    NANO_ASSERT(!prompt.empty());
     for (auto & s : slots) {
         if (s.active) continue;
         s.reset();
@@ -102,7 +102,7 @@ void Engine::step() {
     int hi = 0;
     for (auto & s : slots) if (s.active && s.generating) hi = s.id + 1;
     if (hi > 0) {
-        const int npp = model->n_pos_per_token();   // 4 ⇒ M-RoPE (Qwen3.5): pos can diverge from n_past
+        const int npp = model->n_pos_per_token();
         ModelRunner::Batch db;
         db.token.assign(hi, 0); db.pos.assign(hi, 0); db.kv_dst.assign(hi, runner.scratch_cell());
         if (npp == 4) db.mrope.assign((size_t) 4 * hi, 0);
@@ -121,17 +121,15 @@ void Engine::step() {
         }
         const float * logits = runner.decode_batch(db, /*s0=*/0, /*n_stream=*/hi, /*n_q=*/1, n_kv);
         const int n_vocab = runner.n_vocab();
-        // sampling is the per-slot argmax/sort over a large vocab — parallelize it (slots are independent),
-        // then emit serially since emit touches shared engine state (slot list, callbacks)
+        // sample slots in parallel (independent), then emit serially (touches shared state)
         const int n = (int) out.size();
         std::vector<int32_t> toks(n);
         pool->parallel_for(n, [&](int r) { toks[r] = out[r]->sampler.sample(logits + (size_t) r * n_vocab, n_vocab); });
         for (int r = 0; r < n; r++) { out[r]->n_past += 1; out[r]->mrope_next += 1; emit_token(*out[r], toks[r]); }
     }
 
-    // PREFILL: single-stream per waiting slot; sample its first token on completion.
-    // Recurrent (qwen3.5) prefills the whole prompt at once (its per-slot state can't span steps)
-    // and resets that slot's recurrent state first; dense (qwen3) chunks within a token budget.
+    // PREFILL: per waiting slot — recurrent (qwen3.5) prefills the whole prompt at once and resets
+    // its state first; dense (qwen3) chunks within a token budget. Samples the first token on completion.
     const bool recurrent = runner.is_recurrent();
     int budget = max_batch;
     for (auto & s : slots) {
@@ -139,7 +137,7 @@ void Engine::step() {
         if (recurrent && s.n_past == 0) runner.reset_recurrent_slot(s.id);
         const int remaining = s.n_prompt - s.n_past;
         const int n = recurrent ? remaining : std::min(remaining, budget);
-        const bool image = !s.prompt_embd.empty();   // VLM image prefill (always recurrent ⇒ n == n_prompt)
+        const bool image = !s.prompt_embd.empty();
         ModelRunner::Batch pb;
         if (image) { pb.embd = s.prompt_embd; pb.mrope = s.prompt_mrope; }
         for (int i = 0; i < n; i++) {
@@ -147,13 +145,13 @@ void Engine::step() {
             pb.pos.push_back(s.n_past + i);
             pb.kv_dst.push_back(s.id * n_ctx_pad + s.n_past + i);
         }
-        pb.logit_rows.push_back(n - 1);   // last token's logits (used only when the prompt completes)
+        pb.logit_rows.push_back(n - 1);
         const float * logits = runner.decode_batch(pb, /*s0=*/s.id, /*n_stream=*/1, /*n_q=*/n, s.n_past + n);
         s.n_past += n;
         budget   -= n;
         if (!s.prefilling()) {
             s.generating = true;
-            if (!image) s.mrope_next = s.n_past;   // text: M-RoPE position tracks the sequence position
+            if (!image) s.mrope_next = s.n_past;
             sample_emit(s, logits);
         }
     }
