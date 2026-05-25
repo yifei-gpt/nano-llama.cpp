@@ -31,6 +31,7 @@ bool cuda_available() {
 // dequantize token_embd.weight into m.embd_f32 (the GPU get_rows path can't read most quant types)
 void load_embd_table(Model & m, GgufFile & gf, const std::string & path) {
     ggml_tensor * src = gf.tensor("token_embd.weight");
+    if (!src) NANO_ABORT("missing token_embd.weight");
     auto to_float = ggml_get_type_traits(src->type)->to_float;
     if (!to_float) NANO_ABORT("token_embd type %s has no dequantizer", ggml_type_name(src->type));
     std::ifstream fin(path, std::ios::binary);

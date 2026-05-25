@@ -52,6 +52,14 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
     if (!te) NANO_ABORT("missing token_embd.weight");
     hp.n_vocab = (int32_t) te->ne[1];
 
+    if (hp.n_layer <= 0 || hp.n_embd <= 0 || hp.n_head <= 0 || hp.head_dim <= 0 || hp.n_ff <= 0 || hp.n_vocab <= 0)
+        NANO_ABORT("model has a non-positive dimension in its hparams");
+    if (hp.n_head_kv <= 0 || hp.n_head % hp.n_head_kv != 0)
+        NANO_ABORT("n_head (%d) must be a multiple of n_head_kv (%d) for GQA", hp.n_head, hp.n_head_kv);
+    if (model.dt_rank <= 0 || model.d_inner <= 0 || model.d_conv <= 0 || model.d_state <= 0 ||
+        model.n_group <= 0 || model.full_attn_interval <= 0)
+        NANO_ABORT("model has a non-positive SSM dimension in its hparams");
+
     NANO_LOG("model: %s | n_layer=%d n_embd=%d n_head=%d n_head_kv=%d head_dim=%d n_ff=%d n_vocab=%d",
              model.name.c_str(), hp.n_layer, hp.n_embd, hp.n_head, hp.n_head_kv, hp.head_dim, hp.n_ff, hp.n_vocab);
     NANO_LOG("model: ssm d_conv=%d d_state=%d n_group=%d dt_rank=%d d_inner=%d | full_attn_interval=%d rope_sections=[%d,%d,%d,%d]",

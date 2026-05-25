@@ -74,12 +74,14 @@ std::vector<std::string> GgufFile::arr_strs(const std::string & key) const {
 }
 std::vector<int32_t> GgufFile::arr_i32(const std::string & key) const {
     int64_t id = find_or_abort(gguf, key);
+    if (gguf_get_arr_type(gguf, id) != GGUF_TYPE_INT32) NANO_ABORT("gguf array %s is not int32", key.c_str());
     size_t n = gguf_get_arr_n(gguf, id);
     const int32_t * data = (const int32_t *) gguf_get_arr_data(gguf, id);
     return std::vector<int32_t>(data, data + n);
 }
 std::vector<float> GgufFile::arr_f32(const std::string & key) const {
     int64_t id = find_or_abort(gguf, key);
+    if (gguf_get_arr_type(gguf, id) != GGUF_TYPE_FLOAT32) NANO_ABORT("gguf array %s is not float32", key.c_str());
     size_t n = gguf_get_arr_n(gguf, id);
     const float * data = (const float *) gguf_get_arr_data(gguf, id);
     return std::vector<float>(data, data + n);

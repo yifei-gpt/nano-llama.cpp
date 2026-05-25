@@ -14,7 +14,7 @@ ThreadPool::~ThreadPool() {
 }
 
 void ThreadPool::worker(int id) {
-    int seen = 0;
+    unsigned seen = 0;
     while (true) {
         std::unique_lock<std::mutex> lk(m_);
         cv_start_.wait(lk, [&] { return stop_ || epoch_ != seen; });

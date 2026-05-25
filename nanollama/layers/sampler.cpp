@@ -32,6 +32,7 @@ int32_t Sampler::sample(const float * logits, int n_vocab) {
     float maxl = c[0].v;
     double sum = 0;
     for (auto & x : c) { x.v = std::exp((x.v - maxl) / sp.temperature); sum += x.v; }
+    if (!std::isfinite(sum) || sum <= 0.0) return top_id;   // NaN/Inf logits → fall back to argmax
     for (auto & x : c) x.v /= (float) sum;
 
     if (sp.top_p < 1.0f) {

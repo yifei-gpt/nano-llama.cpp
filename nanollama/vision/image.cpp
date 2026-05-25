@@ -44,9 +44,10 @@ static void preprocess_rgb(const unsigned char * src, int w, int h, int align, i
             const int x0 = std::min((int) px, w - 1), y0 = std::min((int) py, h - 1);
             const int x1 = std::min(x0 + 1, w - 1),    y1 = std::min(y0 + 1, h - 1);
             const float xf = px - x0, yf = py - y0;
+            const size_t r0 = (size_t) y0 * w, r1 = (size_t) y1 * w;   // size_t: a huge image must not overflow int
             for (int ch = 0; ch < 3; ch++) {
-                const float top = lerp((float) src[3 * (y0 * w + x0) + ch], (float) src[3 * (y0 * w + x1) + ch], xf);
-                const float bot = lerp((float) src[3 * (y1 * w + x0) + ch], (float) src[3 * (y1 * w + x1) + ch], xf);
+                const float top = lerp((float) src[3 * (r0 + x0) + ch], (float) src[3 * (r0 + x1) + ch], xf);
+                const float bot = lerp((float) src[3 * (r1 + x0) + ch], (float) src[3 * (r1 + x1) + ch], xf);
                 const float u8  = std::round(lerp(top, bot, yf));   // llama rounds to u8 before normalizing
                 out.data[(size_t) ch * nx * ny + (size_t) y * nx + x] = (u8 / 255.0f - mean[ch]) / std_[ch];
             }

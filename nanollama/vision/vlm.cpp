@@ -3,6 +3,7 @@
 #include "nanollama/vision/clip.h"
 #include "nanollama/engine/llm.h"
 #include "nanollama/layers/sampler.h"
+#include "nanollama/common.h"
 
 #include <algorithm>
 
@@ -61,6 +62,10 @@ std::string generate_vlm(LLM & llm, ClipModel * clip, const ClipImage * img,
     const float * tbl    = llm.model->embd_f32.data();
 
     VlmInput in = build_vlm_input(*llm.model, vocab, clip, img, user_text, think);
+    if (in.n_tokens > llm.runner.cp.n_ctx) {
+        NANO_LOG("prompt is %d tokens (incl. image) but n_ctx=%d — increase -c", in.n_tokens, llm.runner.cp.n_ctx);
+        return {};
+    }
 
     Sampler sampler; sampler.init(sp);
     const int n_vocab = llm.runner.n_vocab();

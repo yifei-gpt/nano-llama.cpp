@@ -56,6 +56,7 @@ Slot * Engine::admit_embd(const std::vector<float> & embd, const std::vector<int
                           std::function<void(const std::string &)> on_done,
                           std::function<bool()> is_cancelled) {
     NANO_ASSERT(n_tokens > 0 && n_tokens <= n_ctx);
+    NANO_ASSERT((int) embd.size() == n_tokens * model->hparams.n_embd && (int) mrope.size() == 4 * n_tokens);
     for (auto & s : slots) {
         if (s.active) continue;
         s.reset();
