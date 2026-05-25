@@ -3,8 +3,20 @@
 #include "nanollama/common.h"
 
 #include <algorithm>
+#include <thread>
+#include <vector>
 
 namespace nano {
+
+// run fn(0..n-1) across up to n_threads threads (strided); each index is independent
+template <class F>
+static void parallel_for(int n, int n_threads, F && fn) {
+    const int nt = std::min(std::max(n_threads, 1), n);
+    if (nt <= 1) { for (int i = 0; i < n; i++) fn(i); return; }
+    std::vector<std::thread> ts; ts.reserve(nt);
+    for (int t = 0; t < nt; t++) ts.emplace_back([&, t] { for (int i = t; i < n; i += nt) fn(i); });
+    for (auto & th : ts) th.join();
+}
 
 void Slot::reset() {
     active = false; generating = false; prompt.clear(); generated.clear();
@@ -73,15 +85,18 @@ bool Engine::has_work() const {
     return false;
 }
 
-// sample the next token for a slot from its logits row, emit it, and finish on EOS / length
-void Engine::sample_emit(Slot & s, const float * logits) {
-    int32_t tok = s.sampler.sample(logits, runner.n_vocab());
+// emit an already-sampled token: append it, stream it, and finish on EOS / length
+void Engine::emit_token(Slot & s, int32_t tok) {
     const bool eos   = !s.sp.ignore_eos && vocab.is_eog(tok);
     const bool limit = (int) s.generated.size() >= s.sp.n_predict;
     if (eos || limit) { if (s.on_done) s.on_done(limit ? "length" : "stop"); free_slot(s); return; }
     s.generated.push_back(tok);
     s.last_token = tok;
     if (s.on_token) s.on_token(vocab.token_to_piece(tok));
+}
+
+void Engine::sample_emit(Slot & s, const float * logits) {
+    emit_token(s, s.sampler.sample(logits, runner.n_vocab()));
 }
 
 void Engine::step() {
@@ -116,7 +131,12 @@ void Engine::step() {
         }
         const float * logits = runner.decode_batch(db, /*s0=*/0, /*n_stream=*/hi, /*n_q=*/1, n_kv);
         const int n_vocab = runner.n_vocab();
-        for (size_t r = 0; r < out.size(); r++) { out[r]->n_past += 1; out[r]->mrope_next += 1; sample_emit(*out[r], logits + r * n_vocab); }
+        // sampling is the per-slot argmax/sort over a large vocab — parallelize it (slots are independent),
+        // then emit serially since emit touches shared engine state (slot list, callbacks)
+        const int n = (int) out.size();
+        std::vector<int32_t> toks(n);
+        parallel_for(n, runner.cp.n_threads, [&](int r) { toks[r] = out[r]->sampler.sample(logits + (size_t) r * n_vocab, n_vocab); });
+        for (int r = 0; r < n; r++) { out[r]->n_past += 1; out[r]->mrope_next += 1; emit_token(*out[r], toks[r]); }
     }
 
     // PREFILL: single-stream per waiting slot; sample its first token on completion.

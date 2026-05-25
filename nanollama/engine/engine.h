@@ -75,7 +75,8 @@ struct Engine {
     void step();
 
 private:
-    void sample_emit(Slot & s, const float * logits);
+    void sample_emit(Slot & s, const float * logits);   // sample one slot then emit (prefill's first token)
+    void emit_token(Slot & s, int32_t tok);              // append/stream a sampled token, finish on EOS/length
 };
 
 } // namespace nano
