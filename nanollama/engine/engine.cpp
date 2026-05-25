@@ -3,20 +3,9 @@
 #include "nanollama/common.h"
 
 #include <algorithm>
-#include <thread>
 #include <vector>
 
 namespace nano {
-
-// run fn(0..n-1) across up to n_threads threads (strided); each index is independent
-template <class F>
-static void parallel_for(int n, int n_threads, F && fn) {
-    const int nt = std::min(std::max(n_threads, 1), n);
-    if (nt <= 1) { for (int i = 0; i < n; i++) fn(i); return; }
-    std::vector<std::thread> ts; ts.reserve(nt);
-    for (int t = 0; t < nt; t++) ts.emplace_back([&, t] { for (int i = t; i < n; i += nt) fn(i); });
-    for (auto & th : ts) th.join();
-}
 
 void Slot::reset() {
     active = false; generating = false; prompt.clear(); generated.clear();
@@ -30,6 +19,7 @@ void Engine::load(const ModelParams & mp, const ContextParams & cp) {
     if (!model) NANO_ABORT("model load failed");
     vocab.load(GgufFile(mp.path));
     runner.init(*model, cp);
+    pool = std::make_unique<ThreadPool>(cp.n_threads);
     n_ctx = cp.n_ctx;
     max_batch = cp.n_ctx;
     n_ctx_pad = runner.n_ctx_pad();
@@ -135,7 +125,7 @@ void Engine::step() {
         // then emit serially since emit touches shared engine state (slot list, callbacks)
         const int n = (int) out.size();
         std::vector<int32_t> toks(n);
-        parallel_for(n, runner.cp.n_threads, [&](int r) { toks[r] = out[r]->sampler.sample(logits + (size_t) r * n_vocab, n_vocab); });
+        pool->parallel_for(n, [&](int r) { toks[r] = out[r]->sampler.sample(logits + (size_t) r * n_vocab, n_vocab); });
         for (int r = 0; r < n; r++) { out[r]->n_past += 1; out[r]->mrope_next += 1; emit_token(*out[r], toks[r]); }
     }
 

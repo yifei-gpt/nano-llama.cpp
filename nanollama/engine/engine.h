@@ -4,6 +4,7 @@
 #include "nanollama/config.h"
 #include "nanollama/models/model.h"
 #include "nanollama/engine/model_runner.h"
+#include "nanollama/engine/thread_pool.h"
 #include "nanollama/tokenizer/vocab.h"
 #include "nanollama/layers/sampler.h"
 
@@ -49,6 +50,7 @@ struct Engine {
     std::unique_ptr<Model> model;
     ModelRunner runner;
     Vocab       vocab;
+    std::unique_ptr<ThreadPool> pool;   // parallel per-slot sampling during decode
 
     std::vector<Slot> slots;
     int n_ctx = 0, max_batch = 0, n_ctx_pad = 0;
