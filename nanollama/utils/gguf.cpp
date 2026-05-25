@@ -78,6 +78,12 @@ std::vector<int32_t> GgufFile::arr_i32(const std::string & key) const {
     const int32_t * data = (const int32_t *) gguf_get_arr_data(gguf, id);
     return std::vector<int32_t>(data, data + n);
 }
+std::vector<float> GgufFile::arr_f32(const std::string & key) const {
+    int64_t id = find_or_abort(gguf, key);
+    size_t n = gguf_get_arr_n(gguf, id);
+    const float * data = (const float *) gguf_get_arr_data(gguf, id);
+    return std::vector<float>(data, data + n);
+}
 
 ggml_tensor * GgufFile::tensor(const std::string & name) const {
     return ggml_get_tensor(meta, name.c_str());

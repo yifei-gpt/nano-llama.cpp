@@ -43,6 +43,10 @@ struct ModelRunner {
 
     const float * decode(const int32_t * tokens, int n_tokens, int n_past);   // single sequence
 
+    // multimodal single-sequence decode: precomputed input embeddings [n_embd*n_tokens] +
+    // explicit M-RoPE positions pos4 [n_pos_per_token*n_tokens]; sequence-causal mask. Logits for the last token.
+    const float * decode_embd(const float * embd, const int32_t * pos4, int n_tokens, int n_past);
+
     // per-stream batched forward: n_stream sequences of n_q tokens each → logits in logit_rows order
     const float * decode_batch(const Batch & b, int s0, int n_stream, int n_q, int n_kv);
 

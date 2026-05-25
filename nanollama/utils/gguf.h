@@ -34,6 +34,7 @@ struct GgufFile {
     // arrays
     std::vector<std::string> arr_strs(const std::string & key) const;
     std::vector<int32_t>     arr_i32 (const std::string & key) const;
+    std::vector<float>       arr_f32 (const std::string & key) const;
 
     // tensors
     ggml_tensor * tensor(const std::string & name) const;            // nullptr if absent
