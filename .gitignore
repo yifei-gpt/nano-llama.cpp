@@ -1,4 +1,4 @@
 build*/
 *.o
 *.gguf
-models/
+/models/
