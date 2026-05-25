@@ -75,7 +75,7 @@ bool Engine::has_work() const {
     return false;
 }
 
-// emit an already-sampled token: append it, stream it, and finish on EOS / length
+// emit an already-sampled token: append it, stream it, and finish on EOS / length / full cache
 void Engine::emit_token(Slot & s, int32_t tok) {
     const bool eos   = !s.sp.ignore_eos && vocab.is_eog(tok);
     const bool limit = (int) s.generated.size() >= s.sp.n_predict;
@@ -83,6 +83,8 @@ void Engine::emit_token(Slot & s, int32_t tok) {
     s.generated.push_back(tok);
     s.last_token = tok;
     if (s.on_token) s.on_token(vocab.token_to_piece(tok));
+    // a slot owns exactly n_ctx KV cells; stop before the next token would write past them
+    if (s.n_past >= n_ctx) { if (s.on_done) s.on_done("length"); free_slot(s); }
 }
 
 void Engine::sample_emit(Slot & s, const float * logits) {
