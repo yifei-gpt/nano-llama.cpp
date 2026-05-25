@@ -13,6 +13,14 @@ option(NANO_CUDA "build the CUDA backend" ON)
 
 # ggml (vendored, trimmed to CPU + CUDA)
 if (NANO_CUDA)
+    # Use the nvcc on PATH (the user's active toolkit). CMake's default can pick an older
+    # /usr/bin/nvcc on multi-toolkit machines; override with -DCMAKE_CUDA_COMPILER=... if needed.
+    if (NOT DEFINED CMAKE_CUDA_COMPILER AND NOT DEFINED ENV{CUDACXX})
+        find_program(NANO_NVCC nvcc)
+        if (NANO_NVCC)
+            set(CMAKE_CUDA_COMPILER "${NANO_NVCC}" CACHE FILEPATH "CUDA compiler (auto: nvcc on PATH)")
+        endif()
+    endif()
     set(GGML_CUDA        ON CACHE BOOL "" FORCE)
     set(GGML_CUDA_GRAPHS ON CACHE BOOL "" FORCE)  # CUDA graph capture/replay for fast token generation
 endif()

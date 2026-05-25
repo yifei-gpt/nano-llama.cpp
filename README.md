@@ -29,14 +29,15 @@ cmake --build build -j
 
 Binaries land in `build/`: `nano-example`, `nano-bench`, `nano-server`.
 
-> If your machine has more than one CUDA toolkit and CMake picks the wrong one, point it at the
-> right compiler and target arch, e.g.
+> The build uses the `nvcc` on your `PATH`. To force a specific toolkit (or target arch), pass
 > `-DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=86`.
 
 ## Get a model
 
 ```bash
-huggingface-cli download Qwen/Qwen3-4B-GGUF Qwen3-4B-Q4_K_M.gguf --local-dir models
+mkdir -p models
+curl -L https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf \
+     -o models/Qwen3-4B-Q4_K_M.gguf
 ```
 
 ## Quick Start

@@ -44,7 +44,7 @@ ggml/                       vendored, trimmed to the CPU + CUDA backends
 cmake -B build                          # CUDA on by default; CPU only: -DNANO_CUDA=OFF
 cmake --build build -j --target nano-example   # rebuild one target while iterating
 ```
-(`NANO_CUDA` is the toggle — it force-enables ggml's CUDA backend, so setting `GGML_CUDA` directly does nothing. Multiple CUDA toolkits installed? add `-DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=86`.)
+(`NANO_CUDA` is the toggle — it force-enables ggml's CUDA backend, so setting `GGML_CUDA` directly does nothing. The build picks the `nvcc` on `PATH`; to force a toolkit/arch add `-DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=86`.)
 
 New `.cpp` under `nanollama/` is compiled automatically (CMake globs it with `CONFIGURE_DEPENDS`) — no build-file edit. A new tool, though, needs its name added to the `foreach(tool ...)` list in `CMakeLists.txt`.
 
