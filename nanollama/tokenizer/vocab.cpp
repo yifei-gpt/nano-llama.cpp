@@ -24,8 +24,8 @@ void Vocab::load(const GgufFile & gf) {
 
     for (int32_t i = 0; i < (int32_t) id_to_token.size(); i++) {
         int t = i < (int32_t) token_type.size() ? token_type[i] : 1;
-        if ((t == 3 || t == 4) && !id_to_token[i].empty())               // CONTROL / USER_DEFINED
-            specials.push_back({ id_to_token[i], i });                   // (skip empty: an empty match would not advance)
+        if ((t == 3 || t == 4) && !id_to_token[i].empty())   // CONTROL / USER_DEFINED (skip empty: can't advance)
+            specials.push_back({ id_to_token[i], i });
     }
     // longest surface form first so e.g. "<|im_start|>" wins over "<"
     std::sort(specials.begin(), specials.end(),

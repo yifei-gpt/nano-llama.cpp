@@ -109,14 +109,17 @@ Endpoints: `/health`, `/v1/models`, `/completion`, `/v1/chat/completions` — wi
 ## Performance
 
 Qwen3.5-4B-Q4_K_M. **GPU:** RTX 3090. **CPU:** AMD Ryzen Threadripper PRO 3955WX (16 cores, 16 threads).
-Single-stream tokens/sec:
+Single-stream tokens/sec and peak memory:
 
-| | prompt (pp512) | generate (tg128) |
-|---|---:|---:|
-| nano-llama.cpp (GPU) | 6017 | 168 |
-| llama.cpp (GPU)      | 5944 | 175 |
-| nano-llama.cpp (CPU) |   98 | 8.8 |
-| llama.cpp (CPU)      |  116 | 9.0 |
+| | prompt (pp512) | generate (tg128) | peak memory |
+|---|---:|---:|---:|
+| nano-llama.cpp (GPU) | 6017 | 168 | 3.0 GiB VRAM |
+| llama.cpp (GPU)      | 5944 | 175 | 3.4 GiB VRAM |
+| nano-llama.cpp (CPU) |   98 | 8.8 |  6.0 GiB RSS |
+| llama.cpp (CPU)      |  116 | 9.0 |  4.1 GiB RSS |
+
+(nano keeps an F32 embedding table in host RAM — the GPU path can't `get_rows` the quantized table —
+so it trades higher CPU RSS for lower VRAM.)
 
 **Continuous batching:** each sequence is its own attention stream, so generation throughput rises
 with concurrency, peaking at **~1,120 tok/s** aggregate on one 3090.
