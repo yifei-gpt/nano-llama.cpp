@@ -13,14 +13,14 @@ a ViT vision encoder for image input).
 
 | area | lines | what |
 |---|---|---|
-| `nanollama/models/` | 734 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
-| `nanollama/engine/` | 836 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
-| `nanollama/vision/` | 488 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
-| `nanollama/layers/` | 194 | `attention`, `ops.h`, `sampler` |
-| `nanollama/tokenizer/` | 222 | `vocab` (byte-level BPE) + `chat` (ChatML) |
-| `nanollama/utils/` | 141 | `gguf` reader |
+| `nanollama/models/` | 760 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
+| `nanollama/engine/` | 837 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
+| `nanollama/vision/` | 493 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
+| `nanollama/layers/` | 195 | `attention`, `ops.h`, `sampler` |
+| `nanollama/tokenizer/` | 223 | `vocab` (byte-level BPE) + `chat` (ChatML) |
+| `nanollama/utils/` | 143 | `gguf` reader |
 | `nanollama/` top `.h` | 93 | `config`, `common`, umbrella header |
-| **nanollama total** | **~2,700** | the engine you edit |
+| **nanollama total** | **~2,750** | the engine you edit |
 | `tools/` | ~520 | `nano-example`, `nano-bench`, `nano-server` |
 
 Excluded: `nanollama/tokenizer/unicode*.{cpp,h}` (~8.6k lines of Unicode tables ported from
@@ -94,9 +94,9 @@ Add `nanollama/models/<arch>.{h,cpp}` mirroring `qwen3.*` (or `qwen35.*` for a h
    `recurrent_conv_size()` / `recurrent_state_size()` (for SSM/linear-attention state).
 2. `<arch>_load(model, mp)`: read hparams via `gkey`/`arch_key` from GGUF; `dup()` each tensor by its
    GGUF name into a model context; allocate with `ggml_backend_alloc_ctx_tensors_from_buft` (GPU when
-   `cuda_available()`); stream the data from the file; then `load_embd_table(model, gf, path)` for the host
-   F32 embedding table (the GPU path can't `get_rows` most quant types). `cuda_available()` and
-   `load_embd_table()` are shared helpers in `model.cpp` — reuse them.
+   `cuda_available()`); stream the data from the file; then `load_embd(model, model.tok_embd)` to wire up
+   the token-embedding lookup — `Model::embed_tokens()` dequantizes only the rows it needs (the GPU path
+   can't `get_rows` K-quant embeddings). `cuda_available()` and `load_embd()` are shared helpers in `model.cpp`.
 3. `<arch>_model::build_graph(...)`: write the forward pass with `layers/ops.h` + `build_attention`,
    gathering the output rows at the last layer (`out_ids`) so the final norm → lm-head run only on those.
    Match the reference op order exactly — norm placement, RoPE type/theta, attention scale, MLP shape —
@@ -188,7 +188,7 @@ Caches and scheduler:
 ## Invariants (don't break these)
 
 - **Single backend.** The whole graph runs on one backend; this is what lets ggml capture & replay a CUDA graph. Don't reintroduce a multi-backend scheduler without measuring tg speed.
-- **Host embedding lookup.** CUDA's `get_rows` can't read Q6_K, so the embedding is gathered on the host into an input tensor. Keep new graphs free of unsupported ops on the GPU path.
+- **Host embedding lookup.** CUDA's `get_rows` can't read K-quant (e.g. Q6_K) embeddings, so `embed_tokens` dequantizes the needed rows on the host (no full F32 table) and feeds them as the graph's `embd` input. Keep new graphs free of GPU-unsupported ops.
 - **Stable graph topology.** Graphs are rebuilt into fixed buffers (`dec_mem`/`bat_mem`) so same-shape steps replay the captured CUDA graph. The shape is `n_kv` (padded to 256), plus — for batched decode — `n_stream` (active slots) and `n_q`: a steady set of running slots replays, while admitting/freeing re-captures. Changing shapes every step forfeits that speed.
 - **M-RoPE position ≠ sequence position.** For Qwen3.5 an image consumes `max(grid)` rope positions but many KV cells, so a slot tracks both `n_past` (KV cell) and `mrope_next` (rope position). The mask uses sequence positions; rope uses the 4-section M-RoPE positions.
 - **Match the reference numerically where it's cheap.** Greedy text is token-for-token identical to llama.cpp (CPU+GPU). Vision output can differ on low-confidence tokens (independent ViT fp accumulation) but the algorithm — grid, token count, M-RoPE, flash-attn — must match.

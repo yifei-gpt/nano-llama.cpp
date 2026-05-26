@@ -9,13 +9,13 @@ A small, readable LLM inference engine in C++/CUDA — GGUF, on CPU or a single 
 
 The kernels come from a trimmed copy of [ggml](https://github.com/ggml-org/ggml); the models,
 tokenizer, KV/recurrent cache, sampler, vision encoder, and server are written here in
-**~2,700 lines** of C++.
+**~2,750 lines** of C++.
 
 ## Key Features
 
 - 🚀 **Fast** — on a single GPU, the same tokens/sec as the reference ggml runtime, for text *and* images.
 - 🖼️ **Multimodal** — image input via a built-in ViT vision encoder, on the CLI (`--image`) and server.
-- 🛠️ **Developer-friendly** — a small, readable codebase (~2,700 lines of C++); add your own models and operators following the `AGENTS.md` guide.
+- 🛠️ **Developer-friendly** — a small, readable codebase (~2,750 lines of C++); add your own models and operators following the `AGENTS.md` guide.
 - 🔀 **Continuous-batching server** — OpenAI-compatible `/v1/chat/completions` + `/completion` with streaming; multiple in-flight requests (text or image) batched into one forward pass.
 - 🖥️ **Backend support** — the same code runs on CPU or CUDA; the GPU path uses flash-attention and CUDA-graph replay.
 - 🪶 **No heavy dependencies** — a vendored ggml plus two small libraries (HTTP + JSON) for the server.
