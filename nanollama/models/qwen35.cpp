@@ -83,7 +83,8 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
 
     model.tok_embd    = dup("token_embd.weight");
     model.output_norm = dup("output_norm.weight");
-    model.output      = model.tok_embd;   // tied embeddings
+    model.output      = dup("output.weight");        // separate LM head (e.g. Qwen3.5-27B)
+    if (!model.output) model.output = model.tok_embd; // tied embeddings (e.g. Qwen3.5-4B)
 
     model.layers.resize(hp.n_layer);
     char nm[128];
@@ -142,7 +143,8 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
         if (!fin) NANO_ABORT("short read for tensor %s", t->name);
         ggml_backend_tensor_set(t, staging.data(), 0, nb);
     };
-    load_one(model.tok_embd);   // output is tied to it (no separate output.weight)
+    load_one(model.tok_embd);
+    if (model.output != model.tok_embd) load_one(model.output);   // separate (untied) LM head
     load_one(model.output_norm);
     for (auto & L : model.layers) {
         for (ggml_tensor * t : { L.attn_norm, L.post_attn_norm, L.ffn_gate, L.ffn_up, L.ffn_down,
