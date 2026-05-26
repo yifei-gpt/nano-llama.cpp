@@ -29,9 +29,8 @@ struct VlmInput {
 VlmInput build_vlm_input(const Model & model, const Vocab & vocab, ClipModel * clip,
                          const ClipImage * img, const std::string & user_text, bool think);
 
-// Build a ChatML prompt from user_text (+ an optional preprocessed image encoded via clip), then
-// generate greedily/sampled. Emits each token piece via on_piece; stops on EOS / n_predict / cancel.
-// Returns the full generated text. img/clip may be null for text-only.
+// Build a ChatML prompt from user_text (+ optional image via clip) and generate, emitting each piece
+// via on_piece; stops on EOS / n_predict / cancel. Returns the full text (img/clip null = text-only).
 std::string generate_vlm(LLM & llm, ClipModel * clip, const ClipImage * img,
                          const std::string & user_text, const SamplingParams & sp, bool think,
                          const std::function<void(const std::string &)> & on_piece = nullptr,
