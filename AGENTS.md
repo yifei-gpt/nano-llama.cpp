@@ -13,9 +13,9 @@ a ViT vision encoder for image input).
 
 | area | lines | what |
 |---|---|---|
-| `nanollama/models/` | 760 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
-| `nanollama/engine/` | 837 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
-| `nanollama/vision/` | 493 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
+| `nanollama/models/` | 757 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
+| `nanollama/engine/` | 830 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
+| `nanollama/vision/` | 491 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
 | `nanollama/layers/` | 195 | `attention`, `ops.h`, `sampler` |
 | `nanollama/tokenizer/` | 223 | `vocab` (byte-level BPE) + `chat` (ChatML) |
 | `nanollama/utils/` | 143 | `gguf` reader |
