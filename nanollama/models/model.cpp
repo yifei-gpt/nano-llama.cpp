@@ -5,12 +5,10 @@
 #include "nanollama/utils/gguf.h"
 #include "nanollama/common.h"
 
+#include "ggml-backend.h"
 #ifdef GGML_USE_CUDA
 #include "ggml-cuda.h"
 #endif
-
-#include <fstream>
-#include <vector>
 
 namespace nano {
 
@@ -28,20 +26,30 @@ bool cuda_available() {
 #endif
 }
 
-// dequantize token_embd.weight into m.embd_f32 (the GPU get_rows path can't read most quant types)
-void load_embd_table(Model & m, GgufFile & gf, const std::string & path) {
-    ggml_tensor * src = gf.tensor("token_embd.weight");
-    if (!src) NANO_ABORT("missing token_embd.weight");
-    auto to_float = ggml_get_type_traits(src->type)->to_float;
-    if (!to_float) NANO_ABORT("token_embd type %s has no dequantizer", ggml_type_name(src->type));
-    std::ifstream fin(path, std::ios::binary);
-    if (!fin) NANO_ABORT("cannot reopen model file for embedding table");
-    std::vector<char> staging(ggml_nbytes(src));
-    fin.seekg((std::streamoff) gf.tensor_file_offset("token_embd.weight"));
-    fin.read(staging.data(), (std::streamsize) ggml_nbytes(src));
-    if (!fin) NANO_ABORT("short read for embedding dequant");
-    m.embd_f32.resize((size_t) m.hparams.n_vocab * m.hparams.n_embd);
-    to_float(staging.data(), m.embd_f32.data(), m.embd_f32.size());
+// dequantize n token-embedding rows into dst (F32). Like llama, only the rows actually used are
+// dequantized — there is no full F32 copy of the table.
+void Model::embed_tokens(const int32_t * ids, int n, float * dst) const {
+    const auto to_float = ggml_get_type_traits(embd_type)->to_float;
+    const char * base = (const char *) embd_data;
+    for (int i = 0; i < n; i++)
+        to_float(base + (size_t) ids[i] * embd_row_bytes, dst + (size_t) i * hparams.n_embd, hparams.n_embd);
+}
+
+// point embed_tokens at the quantized token embedding: directly into the model's host weight buffer on
+// CPU, or a host copy on GPU (the GPU buffer is in VRAM, and CUDA get_rows can't read K-quant embeddings)
+void load_embd(Model & m, ggml_tensor * tok_embd) {
+    if (!tok_embd) NANO_ABORT("missing token_embd.weight");
+    if (!ggml_get_type_traits(tok_embd->type)->to_float)
+        NANO_ABORT("token_embd type %s has no dequantizer", ggml_type_name(tok_embd->type));
+    m.embd_type      = tok_embd->type;
+    m.embd_row_bytes = ggml_row_size(tok_embd->type, m.hparams.n_embd);
+    if (m.n_gpu_layers > 0) {
+        m.embd_host.resize(ggml_nbytes(tok_embd));
+        ggml_backend_tensor_get(tok_embd, m.embd_host.data(), 0, m.embd_host.size());
+        m.embd_data = m.embd_host.data();
+    } else {
+        m.embd_data = tok_embd->data;
+    }
 }
 
 Model * load_model(const ModelParams & mp) {

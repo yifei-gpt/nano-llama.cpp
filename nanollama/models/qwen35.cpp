@@ -152,7 +152,7 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
             load_one(t);
     }
 
-    load_embd_table(model, gf, mp.path);
+    load_embd(model, model.tok_embd);
     NANO_LOG("model: loaded %d layers (%d recurrent, %d attention)",
              hp.n_layer, hp.n_layer - hp.n_layer / model.full_attn_interval, hp.n_layer / model.full_attn_interval);
     return true;

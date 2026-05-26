@@ -64,9 +64,7 @@ static void fill_positions(std::vector<int32_t> & pos, int n_pos_per_token, cons
 }
 
 void ModelRunner::fill_embd(const int32_t * tokens, int n_tokens, float * dst) const {
-    const int n_embd = model->hparams.n_embd;
-    for (int i = 0; i < n_tokens; i++)
-        std::copy_n(&model->embd_f32[(size_t) tokens[i] * n_embd], n_embd, dst + (size_t) i * n_embd);
+    model->embed_tokens(tokens, n_tokens, dst);
 }
 
 // causal mask: token i attends cells 0..pos[i] of its own stream (per-stream isolation is structural)

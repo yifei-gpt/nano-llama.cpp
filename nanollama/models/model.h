@@ -52,11 +52,20 @@ struct Model {
     std::string    arch;
     std::string    name;
 
-    std::vector<float> embd_f32;           // host embedding table for the lookup
+    // token embedding kept quantized; embed_tokens() dequantizes only the rows it needs (like llama),
+    // avoiding a full F32 copy. embd_data points into the model weight buffer on CPU (no copy) or into
+    // embd_host on GPU (a host copy — the GPU weights are in VRAM and CUDA get_rows can't read K-quants).
+    const void *      embd_data      = nullptr;
+    ggml_type         embd_type      = GGML_TYPE_F32;
+    size_t            embd_row_bytes = 0;
+    std::vector<char> embd_host;
+
     ggml_context *     ctx_meta   = nullptr;
     ggml_context *     ctx_repack = nullptr;   // weights in the CPU repack buffer
     std::vector<ggml_backend_buffer_t> bufs;
     int n_gpu_layers = 0;
+
+    void embed_tokens(const int32_t * ids, int n, float * dst) const;   // dequantize n token rows → F32 dst
 
     // arch traits (overridden by hybrid/multimodal models)
     virtual int  n_pos_per_token()     const { return 1; }       // 4 for M-RoPE models
@@ -75,7 +84,7 @@ Model * load_model(const ModelParams & mp);
 
 // shared loader helpers (used by each arch's <arch>_load)
 struct GgufFile;
-bool cuda_available();                                                     // a usable CUDA device is present
-void load_embd_table(Model & m, GgufFile & gf, const std::string & path);  // host F32 embedding table for the lookup
+bool cuda_available();                          // a usable CUDA device is present
+void load_embd(Model & m, ggml_tensor * tok_embd);   // set up the quantized token-embedding lookup for embed_tokens
 
 } // namespace nano

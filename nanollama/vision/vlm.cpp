@@ -12,7 +12,6 @@ namespace nano {
 VlmInput build_vlm_input(const Model & model, const Vocab & vocab, ClipModel * clip,
                          const ClipImage * img, const std::string & user_text, bool think) {
     const int     n_embd  = model.hparams.n_embd;
-    const float * tbl     = model.embd_f32.data();
     const bool    has_img = img && clip;
 
     std::vector<float> vemb; int n_img = 0, gw = 0, gh = 0;
@@ -35,7 +34,7 @@ VlmInput build_vlm_input(const Model & model, const Vocab & vocab, ClipModel * c
     std::vector<float>   & E = in.embd;
     std::vector<int32_t> & P = in.mrope;
     auto emit_text = [&](int32_t T, int j, int pos) {
-        std::copy_n(tbl + (size_t) T * n_embd, n_embd, E.begin() + (size_t) j * n_embd);
+        model.embed_tokens(&T, 1, E.data() + (size_t) j * n_embd);
         P[j] = P[N + j] = P[2 * N + j] = pos; P[3 * N + j] = 0;
     };
     int p = 0, j = 0;
@@ -59,7 +58,6 @@ std::string generate_vlm(LLM & llm, ClipModel * clip, const ClipImage * img,
                          const std::function<bool()> & cancelled) {
     const Vocab & vocab  = llm.get_vocab();
     const int     n_embd = llm.model->hparams.n_embd;
-    const float * tbl    = llm.model->embd_f32.data();
 
     VlmInput in = build_vlm_input(*llm.model, vocab, clip, img, user_text, think);
     if (in.n_tokens > llm.runner.cp.n_ctx) {
@@ -79,7 +77,8 @@ std::string generate_vlm(LLM & llm, ClipModel * clip, const ClipImage * img,
         std::string piece = vocab.token_to_piece(next);
         out += piece;
         if (on_piece) on_piece(piece);
-        std::vector<float> e(tbl + (size_t) next * n_embd, tbl + (size_t) (next + 1) * n_embd);
+        std::vector<float> e(n_embd);
+        llm.model->embed_tokens(&next, 1, e.data());
         int32_t pos4[4] = { p, p, p, 0 };
         next = sampler.sample(llm.runner.decode_embd(e.data(), pos4, 1, n_past), n_vocab);
         n_past++; p++;

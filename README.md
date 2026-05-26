@@ -115,11 +115,8 @@ Single-stream tokens/sec and peak memory:
 |---|---:|---:|---:|
 | nano-llama.cpp (GPU) | 6017 | 168 | 3.0 GiB VRAM |
 | llama.cpp (GPU)      | 5944 | 175 | 3.4 GiB VRAM |
-| nano-llama.cpp (CPU) |   98 | 8.8 |  6.0 GiB RSS |
-| llama.cpp (CPU)      |  116 | 9.0 |  4.1 GiB RSS |
-
-(nano keeps an F32 embedding table in host RAM — the GPU path can't `get_rows` the quantized table —
-so it trades higher CPU RSS for lower VRAM.)
+| nano-llama.cpp (CPU) |   98 | 8.8 | 3.2 GiB RSS |
+| llama.cpp (CPU)      |  116 | 9.0 | 4.1 GiB RSS |
 
 **Continuous batching:** each sequence is its own attention stream, so generation throughput rises
 with concurrency, peaking at **~1,120 tok/s** aggregate on one 3090.

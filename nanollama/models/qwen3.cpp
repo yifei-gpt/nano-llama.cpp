@@ -156,7 +156,7 @@ bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
         }
     }
 
-    load_embd_table(model, gf, mp.path);
+    load_embd(model, model.tok_embd);
     NANO_LOG("model: loaded %d layers%s", hp.n_layer, tied ? " (tied embeddings)" : "");
     return true;
 }
