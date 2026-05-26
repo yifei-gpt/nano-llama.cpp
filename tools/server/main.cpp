@@ -318,7 +318,10 @@ int main(int argc, char ** argv) {
     });
 
     fprintf(stderr, "nano-server listening on http://%s:%d%s\n", host.c_str(), port, g_has_clip ? " (vision enabled)" : "");
-    svr.listen(host.c_str(), port);
+    if (!svr.listen(host.c_str(), port))
+        fprintf(stderr, "nano-server: failed to bind %s:%d (is the port already in use?)\n", host.c_str(), port);
     g_running = false; g_submit.cv.notify_all(); worker.join();
-    return 0;
+    // Skip static destruction: at process exit the CUDA driver may already be shutting down, and freeing
+    // the engine/clip GPU buffers then aborts ("driver shutting down"). The OS reclaims everything.
+    std::_Exit(0);
 }
