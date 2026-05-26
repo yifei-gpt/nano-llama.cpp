@@ -52,9 +52,8 @@ struct Model {
     std::string    arch;
     std::string    name;
 
-    // token embedding kept quantized; embed_tokens() dequantizes only the rows it needs (like llama),
-    // avoiding a full F32 copy. embd_data points into the model weight buffer on CPU (no copy) or into
-    // embd_host on GPU (a host copy — the GPU weights are in VRAM and CUDA get_rows can't read K-quants).
+    // token embedding kept quantized; embed_tokens() dequantizes only the rows it needs (like llama, no
+    // F32 table). embd_data → the model weight buffer on CPU, or embd_host (a host copy) on GPU.
     const void *      embd_data      = nullptr;
     ggml_type         embd_type      = GGML_TYPE_F32;
     size_t            embd_row_bytes = 0;

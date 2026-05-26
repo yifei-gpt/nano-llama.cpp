@@ -63,10 +63,6 @@ static void fill_positions(std::vector<int32_t> & pos, int n_pos_per_token, cons
     }
 }
 
-void ModelRunner::fill_embd(const int32_t * tokens, int n_tokens, float * dst) const {
-    model->embed_tokens(tokens, n_tokens, dst);
-}
-
 // causal mask: token i attends cells 0..pos[i] of its own stream (per-stream isolation is structural)
 template <class T>
 static void fill_causal(T * m, T zero, T neg, const int32_t * pos, int n_tokens, int n_kv) {
@@ -127,7 +123,7 @@ void ModelRunner::free() {
 // token-id wrapper: look up embeddings + build sequential M-RoPE positions, then run decode_embd
 const float * ModelRunner::decode(const int32_t * tokens, int n_tokens, int n_past) {
     std::vector<float> emb((size_t) model->hparams.n_embd * n_tokens);
-    fill_embd(tokens, n_tokens, emb.data());
+    model->embed_tokens(tokens, n_tokens, emb.data());
     std::vector<int32_t> tok_pos(n_tokens), pos;
     for (int i = 0; i < n_tokens; i++) tok_pos[i] = n_past + i;
     fill_positions(pos, model->n_pos_per_token(), tok_pos.data(), n_tokens);
@@ -182,7 +178,7 @@ const float * ModelRunner::decode_batch(const Batch & b, int s0, int n_stream, i
 
     std::vector<float> emb;
     const float * embd_src = b.embd.data();
-    if (b.embd.empty()) { emb.resize((size_t) model->hparams.n_embd * n_tokens); fill_embd(b.token.data(), n_tokens, emb.data()); embd_src = emb.data(); }
+    if (b.embd.empty()) { emb.resize((size_t) model->hparams.n_embd * n_tokens); model->embed_tokens(b.token.data(), n_tokens, emb.data()); embd_src = emb.data(); }
     std::vector<int64_t> kvi(n_tokens);
     for (int i = 0; i < n_tokens; i++) kvi[i] = b.kv_dst[i];
     std::vector<int32_t> pos;

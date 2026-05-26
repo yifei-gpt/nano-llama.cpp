@@ -57,9 +57,6 @@ struct ModelRunner {
     void reset_recurrent_slot(int slot) { rc.clear_slot(slot); }
 
     int n_vocab() const { return model->hparams.n_vocab; }
-
-private:
-    void fill_embd(const int32_t * tokens, int n_tokens, float * dst) const;
 };
 
 } // namespace nano

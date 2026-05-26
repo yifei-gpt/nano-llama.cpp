@@ -26,8 +26,7 @@ bool cuda_available() {
 #endif
 }
 
-// dequantize n token-embedding rows into dst (F32). Like llama, only the rows actually used are
-// dequantized — there is no full F32 copy of the table.
+// dequantize the n requested token-embedding rows into dst (F32)
 void Model::embed_tokens(const int32_t * ids, int n, float * dst) const {
     const auto to_float = ggml_get_type_traits(embd_type)->to_float;
     const char * base = (const char *) embd_data;
@@ -35,8 +34,7 @@ void Model::embed_tokens(const int32_t * ids, int n, float * dst) const {
         to_float(base + (size_t) ids[i] * embd_row_bytes, dst + (size_t) i * hparams.n_embd, hparams.n_embd);
 }
 
-// point embed_tokens at the quantized token embedding: directly into the model's host weight buffer on
-// CPU, or a host copy on GPU (the GPU buffer is in VRAM, and CUDA get_rows can't read K-quant embeddings)
+// point embed_tokens at the quantized embedding: the model's host buffer (CPU) or a host copy (GPU)
 void load_embd(Model & m, ggml_tensor * tok_embd) {
     if (!tok_embd) NANO_ABORT("missing token_embd.weight");
     if (!ggml_get_type_traits(tok_embd->type)->to_float)
