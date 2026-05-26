@@ -28,10 +28,14 @@ bool cuda_available() {
 
 // dequantize the n requested token-embedding rows into dst (F32)
 void Model::embed_tokens(const int32_t * ids, int n, float * dst) const {
-    const auto to_float = ggml_get_type_traits(embd_type)->to_float;
-    const char * base = (const char *) embd_data;
-    for (int i = 0; i < n; i++)
-        to_float(base + (size_t) ids[i] * embd_row_bytes, dst + (size_t) i * hparams.n_embd, hparams.n_embd);
+    const auto    to_float = ggml_get_type_traits(embd_type)->to_float;
+    const char *  base     = (const char *) embd_data;
+    const int64_t n_vocab  = hparams.n_vocab;
+    for (int i = 0; i < n; i++) {
+        int64_t id = ids[i];
+        if (id < 0 || id >= n_vocab) id = 0;   // guard against out-of-range ids (avoid OOB read)
+        to_float(base + (size_t) id * embd_row_bytes, dst + (size_t) i * hparams.n_embd, hparams.n_embd);
+    }
 }
 
 // point embed_tokens at the quantized embedding: the model's host buffer (CPU) or a host copy (GPU)

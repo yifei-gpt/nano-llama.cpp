@@ -270,6 +270,7 @@ int main(int argc, char ** argv) {
         auto r = std::make_shared<Req>();
         r->sp = parse_sampling(j);
         r->prompt = g_engine.get_vocab().tokenize(prompt, false, false);
+        if (r->prompt.empty()) { res.status = 400; res.set_content(R"({"error":"empty prompt"})", "application/json"); return; }
         r->prompt_len = (int) r->prompt.size();
         respond(req, submit(r), j.value("stream", false), /*chat=*/false, res);
     });
@@ -312,6 +313,7 @@ int main(int argc, char ** argv) {
             }
             std::string text = apply_chatml(msgs, /*add_generation_prompt=*/true, think);
             r->prompt = g_engine.get_vocab().tokenize(text, /*add_bos=*/false, /*parse_special=*/true);
+            if (r->prompt.empty()) { res.status = 400; res.set_content(R"({"error":"empty prompt"})", "application/json"); return; }
             r->prompt_len = (int) r->prompt.size();
         }
         respond(req, submit(r), j.value("stream", false), /*chat=*/true, res);
