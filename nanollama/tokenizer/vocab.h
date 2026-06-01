@@ -18,7 +18,6 @@ struct Vocab {
     std::vector<std::pair<std::string, int32_t>> specials;  // surface form -> id (for splitting)
 
     int32_t bos_id = -1, eos_id = -1;
-    bool    add_bos = false;
 
     void load(const GgufFile & gf);
 

@@ -33,7 +33,6 @@ void Vocab::load(const GgufFile & gf) {
 
     bos_id  = gf.has(gkey::TOK_BOS) ? gf.i32(gkey::TOK_BOS) : -1;
     eos_id  = gf.has(gkey::TOK_EOS) ? gf.i32(gkey::TOK_EOS) : -1;
-    add_bos = gf.boolean(gkey::TOK_ADD_BOS, false);
     NANO_LOG("vocab: %zu tokens, %zu merges, %zu special, bos=%d eos=%d",
              id_to_token.size(), merge_rank.size(), specials.size(), bos_id, eos_id);
 }

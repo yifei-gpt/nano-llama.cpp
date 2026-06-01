@@ -43,7 +43,6 @@ namespace gkey {
     constexpr const char * TOK_MERGES      = "tokenizer.ggml.merges";
     constexpr const char * TOK_BOS         = "tokenizer.ggml.bos_token_id";
     constexpr const char * TOK_EOS         = "tokenizer.ggml.eos_token_id";
-    constexpr const char * TOK_ADD_BOS     = "tokenizer.ggml.add_bos_token";
 }
 
 inline std::string arch_key(const char * fmt, const std::string & arch) {
