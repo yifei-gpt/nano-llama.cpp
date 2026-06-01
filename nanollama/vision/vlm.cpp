@@ -60,7 +60,7 @@ std::string generate_vlm(LLM & llm, ClipModel * clip, const ClipImage * img,
     const int     n_embd = llm.model->hparams.n_embd;
 
     VlmInput in = build_vlm_input(*llm.model, vocab, clip, img, user_text, think);
-    if (in.n_tokens > llm.runner.cp.n_ctx) {
+    if (in.n_tokens >= llm.runner.cp.n_ctx) {
         NANO_LOG("prompt is %d tokens (incl. image) but n_ctx=%d — increase -c", in.n_tokens, llm.runner.cp.n_ctx);
         return {};
     }

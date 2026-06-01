@@ -238,7 +238,9 @@ int main(int argc, char ** argv) {
         };
         res.set_chunked_content_provider("text/event-stream",
             [r, id, created, chat, pending, content_chunk](size_t, httplib::DataSink & sink) -> bool {
-                auto d = r->deltas.pop();
+                std::optional<std::string> d;
+                while (!r->deltas.pop_for(d, 100))   // re-check the connection while idle between tokens
+                    if (!sink.is_writable()) { r->cancelled = true; return false; }
                 std::string out;
                 if (d) {
                     *pending += *d;

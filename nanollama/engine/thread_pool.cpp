@@ -21,7 +21,7 @@ void ThreadPool::worker(int id) {
         if (stop_) return;
         seen = epoch_;
         lk.unlock();
-        for (int i = id; i < n_items_; i += n_threads_) (*fn_)(i);
+        for (int i = id; i < n_items_; i += n_threads_) try { (*fn_)(i); } catch (...) {}  // never let a task escape a worker
         lk.lock();
         if (++finished_ == n_threads_ - 1) cv_done_.notify_one();
     }
@@ -34,7 +34,7 @@ void ThreadPool::parallel_for(int n, const std::function<void(int)> & fn) {
         fn_ = &fn; n_items_ = n; finished_ = 0; epoch_++;
     }
     cv_start_.notify_all();
-    for (int i = 0; i < n; i += n_threads_) fn(i);   // calling thread = worker 0
+    for (int i = 0; i < n; i += n_threads_) try { fn(i); } catch (...) {}   // calling thread = worker 0
     std::unique_lock<std::mutex> lk(m_);
     cv_done_.wait(lk, [&] { return finished_ == n_threads_ - 1; });
 }

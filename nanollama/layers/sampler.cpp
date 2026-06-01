@@ -21,7 +21,13 @@ int32_t Sampler::sample(const float * logits, int n_vocab) {
 
     struct Cand { int32_t id; float v; };   // v holds the logit, then the probability
     std::vector<Cand> c(n_vocab);
-    for (int i = 0; i < n_vocab; i++) c[i] = { i, logits[i] };
+    bool finite = true;
+    for (int i = 0; i < n_vocab; i++) { c[i] = { i, logits[i] }; if (!std::isfinite(logits[i])) finite = false; }
+    if (!finite) {   // a NaN/Inf logit breaks partial_sort's strict-weak-ordering (UB) → greedy
+        int best = 0;
+        for (int i = 1; i < n_vocab; i++) if (logits[i] > logits[best]) best = i;
+        return best;
+    }
 
     int k = (sp.top_k > 0 && sp.top_k < n_vocab) ? sp.top_k : n_vocab;
     std::partial_sort(c.begin(), c.begin() + k, c.end(),

@@ -40,7 +40,8 @@ Slot * Engine::admit(std::vector<int32_t> prompt, const SamplingParams & sp,
         s.reset();
         s.active = true;
         s.prompt = std::move(prompt);
-        if ((int) s.prompt.size() > n_ctx) s.prompt.resize(n_ctx);
+        // keep the most recent n_ctx tokens (the chat suffix matters), not the oldest
+        if ((int) s.prompt.size() > n_ctx) s.prompt.erase(s.prompt.begin(), s.prompt.end() - n_ctx);
         s.n_prompt = (int) s.prompt.size();
         s.sp = sp; s.on_token = std::move(on_token); s.on_done = std::move(on_done);
         s.is_cancelled = std::move(is_cancelled);
@@ -79,7 +80,7 @@ bool Engine::has_work() const {
 // emit an already-sampled token: append it, stream it, and finish on EOS / length / full cache
 void Engine::emit_token(Slot & s, int32_t tok) {
     const bool eos   = !s.sp.ignore_eos && vocab.is_eog(tok);
-    const bool limit = (int) s.generated.size() >= s.sp.n_predict;
+    const bool limit = s.sp.n_predict >= 0 && (int) s.generated.size() >= s.sp.n_predict;  // n_predict < 0 ⇒ unbounded
     if (eos || limit) { if (s.on_done) s.on_done(limit ? "length" : "stop"); free_slot(s); return; }
     s.generated.push_back(tok);
     s.last_token = tok;
