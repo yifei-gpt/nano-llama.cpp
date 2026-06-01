@@ -76,15 +76,16 @@ bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
     auto repackable = [&](const ggml_tensor * src) {
         return model.ctx_repack && src->type == GGML_TYPE_Q4_K && ggml_is_matrix(src) && src->ne[1] % 8 == 0;
     };
-    auto dup = [&](const char * name) -> ggml_tensor * {
+    auto dup = [&](const char * name, bool allow_repack = true) -> ggml_tensor * {
         ggml_tensor * src = gf.tensor(name);
         if (!src) return nullptr;
-        ggml_tensor * t = ggml_dup_tensor(repackable(src) ? model.ctx_repack : model.ctx_meta, src);
+        ggml_tensor * t = ggml_dup_tensor(allow_repack && repackable(src) ? model.ctx_repack : model.ctx_meta, src);
         ggml_set_name(t, name);
         return t;
     };
 
-    model.tok_embd    = dup("token_embd.weight");
+    // token_embd is read raw by host-side embed_tokens (dequant), so it must NOT be row-repacked
+    model.tok_embd    = dup("token_embd.weight", /*allow_repack=*/false);
     model.output_norm = dup("output_norm.weight");
     model.output      = dup("output.weight");
     bool tied = false;

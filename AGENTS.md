@@ -13,15 +13,15 @@ a ViT vision encoder for image input).
 
 | area | lines | what |
 |---|---|---|
-| `nanollama/models/` | 757 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
-| `nanollama/engine/` | 830 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
+| `nanollama/models/` | 763 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
+| `nanollama/engine/` | 831 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
 | `nanollama/vision/` | 491 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
-| `nanollama/layers/` | 195 | `attention`, `ops.h`, `sampler` |
-| `nanollama/tokenizer/` | 223 | `vocab` (byte-level BPE) + `chat` (ChatML) |
+| `nanollama/layers/` | 201 | `attention`, `ops.h`, `sampler` |
+| `nanollama/tokenizer/` | 221 | `vocab` (byte-level BPE) + `chat` (ChatML) |
 | `nanollama/utils/` | 143 | `gguf` reader |
-| `nanollama/` top `.h` | 93 | `config`, `common`, umbrella header |
-| **nanollama total** | **~2,750** | the engine you edit |
-| `tools/` | ~520 | `nano-example`, `nano-bench`, `nano-server` |
+| `nanollama/` top `.h` | 92 | `config`, `common`, umbrella header |
+| **nanollama total** | **~2,740** | the engine you edit |
+| `tools/` | ~525 | `nano-example`, `nano-bench`, `nano-server` |
 
 Excluded: `nanollama/tokenizer/unicode*.{cpp,h}` (~8.6k lines of Unicode tables ported from
 llama.cpp — ignore them) and `ggml/` (~155k lines, vendored).
@@ -123,8 +123,8 @@ inline helper to `layers/ops.h` (like `rms_norm`/`swiglu`/`gated_rms_norm`), or 
 `build_attention`/`build_recurrent` for something bigger. ggml runs each op on whichever backend its
 inputs already live on, so a composed op works on CPU and CUDA for free, with **zero** changes to
 vendored ggml. Follow the existing tensor layouts (e.g. `[head_dim, n_head, n_tokens]`) and
-reshape/permute the way `build_attention` does. Qwen3.5's whole recurrent block is ~30 lines this way,
-reusing fused ggml ops (`ggml_gated_delta_net`, `ggml_ssm_conv`, `ggml_rope_multi`).
+reshape/permute the way `build_attention` does. Qwen3.5's whole recurrent block is ~50 lines this way,
+reusing fused ggml ops (`ggml_gated_delta_net`, `ggml_ssm_conv`).
 
 **Level 2 — a genuinely new ggml op** (a kernel you can't express as a composition). Heavy and rarely
 needed; it touches vendored ggml in several places. To add `GGML_OP_FOO`:
