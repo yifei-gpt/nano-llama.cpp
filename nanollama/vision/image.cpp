@@ -22,6 +22,12 @@ static void smart_resize(int w, int h, int align, int min_px, int max_px, int & 
         const float beta = std::sqrt((float) w * h / max_px);
         ow = floor_f(w / beta);
         oh = floor_f(h / beta);
+        // an extreme aspect ratio floors one side up to `align`, so the area can still exceed max_px;
+        // cap the longer side to keep ow*oh <= max_px (else a crafted image forces a huge allocation)
+        if ((int64_t) ow * oh > max_px) {
+            if (ow >= oh) ow = floor_f((float) max_px / oh);
+            else          oh = floor_f((float) max_px / ow);
+        }
     } else if ((int64_t) ow * oh < min_px) {
         const float beta = std::sqrt((float) min_px / ((float) w * h));
         ow = ceil_f(w * beta);
@@ -29,7 +35,7 @@ static void smart_resize(int w, int h, int align, int min_px, int max_px, int & 
     }
 }
 
-// bilinear-resize the loaded RGB image to the smart-resized size, then normalize into planar layout
+// bilinear-resize to smart-resized size, normalize to planar layout
 static void preprocess_rgb(const unsigned char * src, int w, int h, int align, int min_px, int max_px,
                            const float mean[3], const float std_[3], ClipImage & out) {
     int nx, ny;
