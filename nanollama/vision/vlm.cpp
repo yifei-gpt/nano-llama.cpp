@@ -71,7 +71,7 @@ std::string generate_vlm(LLM & llm, ClipModel * clip, const ClipImage * img,
 
     std::string out;
     int n_past = in.n_tokens, p = in.mrope_next;
-    for (int t = 0; t < sp.n_predict && n_past < llm.runner.cp.n_ctx; t++) {   // stop before the cache fills
+    for (int t = 0; (sp.n_predict < 0 || t < sp.n_predict) && n_past < llm.runner.cp.n_ctx; t++) {   // n_predict < 0 ⇒ unbounded
         if (cancelled && cancelled()) break;
         if (!sp.ignore_eos && vocab.is_eog(next)) break;
         std::string piece = vocab.token_to_piece(next);
