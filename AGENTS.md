@@ -13,15 +13,15 @@ a ViT vision encoder for image input).
 
 | area | lines | what |
 |---|---|---|
-| `nanollama/models/` | 764 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
-| `nanollama/engine/` | 831 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
-| `nanollama/vision/` | 491 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
+| `nanollama/models/` | 748 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
+| `nanollama/engine/` | 830 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
+| `nanollama/vision/` | 496 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
 | `nanollama/layers/` | 201 | `attention`, `ops.h`, `sampler` |
-| `nanollama/tokenizer/` | 221 | `vocab` (byte-level BPE) + `chat` (ChatML) |
-| `nanollama/utils/` | 143 | `gguf` reader |
-| `nanollama/` top `.h` | 92 | `config`, `common`, umbrella header |
-| **nanollama total** | **~2,740** | the engine you edit |
-| `tools/` | ~525 | `nano-example`, `nano-bench`, `nano-server` |
+| `nanollama/tokenizer/` | 226 | `vocab` (byte-level BPE) + `chat` (ChatML) |
+| `nanollama/utils/` | 138 | `gguf` reader |
+| `nanollama/` top `.h` | 93 | `config`, `common`, umbrella header |
+| **nanollama total** | **~2,730** | the engine you edit |
+| `tools/` | ~520 | `nano-example`, `nano-bench`, `nano-server` |
 
 Excluded: `nanollama/tokenizer/unicode*.{cpp,h}` (~8.6k lines of Unicode tables ported from
 llama.cpp — ignore them) and `ggml/` (~155k lines, vendored).
