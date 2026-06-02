@@ -8,9 +8,12 @@
 
 namespace nano {
 
-// GPT-2-style pretokenizer regex
 static const std::vector<std::string> QWEN2_REGEX = {
     "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+};
+// Qwen3.5 variant: letter runs also consume combining marks ([\p{L}\p{M}]+), which excludes \p{M} from the symbol run
+static const std::vector<std::string> QWEN35_REGEX = {
+    "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?[\\p{L}\\p{M}]+|\\p{N}| ?[^\\s\\p{L}\\p{M}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
 };
 
 void Vocab::load(const GgufFile & gf) {
@@ -33,8 +36,9 @@ void Vocab::load(const GgufFile & gf) {
 
     bos_id  = gf.has(gkey::TOK_BOS) ? gf.i32(gkey::TOK_BOS) : -1;
     eos_id  = gf.has(gkey::TOK_EOS) ? gf.i32(gkey::TOK_EOS) : -1;
-    NANO_LOG("vocab: %zu tokens, %zu merges, %zu special, bos=%d eos=%d",
-             id_to_token.size(), merge_rank.size(), specials.size(), bos_id, eos_id);
+    pretok_qwen35 = gf.has(gkey::TOK_PRE) && gf.str(gkey::TOK_PRE) == "qwen35";
+    NANO_LOG("vocab: %zu tokens, %zu merges, %zu special, bos=%d eos=%d, pre=%s",
+             id_to_token.size(), merge_rank.size(), specials.size(), bos_id, eos_id, pretok_qwen35 ? "qwen35" : "qwen2");
 }
 
 bool Vocab::is_eog(int32_t id) const {
@@ -49,7 +53,7 @@ bool Vocab::is_eog(int32_t id) const {
 
 std::vector<int32_t> Vocab::bpe_encode(const std::string & text) const {
     std::vector<int32_t> out;
-    for (const std::string & word : unicode_regex_split(text, QWEN2_REGEX, true)) {
+    for (const std::string & word : unicode_regex_split(text, pretok_qwen35 ? QWEN35_REGEX : QWEN2_REGEX, true)) {
         // ignore_merges: emit the whole pretoken if it is itself a vocab token
         auto whole = token_to_id.find(word);
         if (whole != token_to_id.end()) { out.push_back(whole->second); continue; }

@@ -18,13 +18,14 @@ struct Vocab {
     std::vector<std::pair<std::string, int32_t>> specials;  // surface form -> id (for splitting)
 
     int32_t bos_id = -1, eos_id = -1;
+    bool    pretok_qwen35 = false;   // Qwen3.5 groups combining marks with letters (\p{M}); else qwen2 regex
 
     void load(const GgufFile & gf);
 
     // Encode text to token ids. parse_special splits out <|im_start|> etc.
     std::vector<int32_t> tokenize(const std::string & text, bool add_bos_token, bool parse_special) const;
 
-    // decode one token to its text piece (byte-decoded for normal tokens)
+    // decode one token to text (byte-decoded for normal tokens)
     std::string token_to_piece(int32_t id) const;
 
     bool is_eog(int32_t id) const;
