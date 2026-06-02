@@ -86,9 +86,9 @@ std::vector<int32_t> Vocab::bpe_encode(const std::string & text) const {
         while (!pq.empty()) {
             Bigram b = pq.top(); pq.pop();
             Sym & l = syms[b.left];
-            if (b.right == -1 || l.next != b.right) continue;       // stale
             Sym & r = syms[b.right];
-            if (l.text.size() + r.text.size() != b.size) continue;  // stale
+            // stale if either side was merged away (empty), is no longer adjacent, or has grown
+            if (l.text.empty() || r.text.empty() || l.next != b.right || l.text.size() + r.text.size() != b.size) continue;
             l.text += r.text;
             l.next = r.next;
             if (r.next != -1) syms[r.next].prev = b.left;
