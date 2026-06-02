@@ -17,7 +17,7 @@ a ViT vision encoder for image input).
 | `nanollama/engine/` | 830 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
 | `nanollama/vision/` | 496 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
 | `nanollama/layers/` | 201 | `attention`, `ops.h`, `sampler` |
-| `nanollama/tokenizer/` | 226 | `vocab` (byte-level BPE) + `chat` (ChatML) |
+| `nanollama/tokenizer/` | 223 | `vocab` (byte-level BPE) + `chat` (ChatML) |
 | `nanollama/utils/` | 138 | `gguf` reader |
 | `nanollama/` top `.h` | 93 | `config`, `common`, umbrella header |
 | **nanollama total** | **~2,730** | the engine you edit |
