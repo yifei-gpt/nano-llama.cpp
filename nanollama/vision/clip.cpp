@@ -1,4 +1,4 @@
-// clip.cpp — load the Qwen3-VL mmproj ViT and encode an image to LLM-space embeddings
+// clip.cpp — Qwen3-VL mmproj ViT: load + encode image to LLM-space embeddings
 #include "nanollama/vision/clip.h"
 #include "nanollama/utils/gguf.h"
 #include "nanollama/common.h"
@@ -106,7 +106,6 @@ bool clip_load(ClipModel & m, const std::string & path, int n_gpu_layers) {
     return true;
 }
 
-// ---- ViT graph helpers ----
 static ggml_tensor * vnorm(ggml_context * c, ggml_tensor * x, ggml_tensor * w, ggml_tensor * b, float eps) {
     x = ggml_norm(c, x, eps);
     x = ggml_mul(c, x, w);

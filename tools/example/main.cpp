@@ -71,7 +71,7 @@ int main(int argc, char ** argv) {
     if (prompt.empty()) prompt = "Hello, my name is";
     sp.n_predict = n_predict;
 
-    ggml_backend_load_all();   // register CPU/CUDA backends
+    ggml_backend_load_all();
 
     LLM llm;
     llm.load(mp, cp);
@@ -79,7 +79,6 @@ int main(int argc, char ** argv) {
     if (!mmproj.empty() && !image_path.empty()) {   // multimodal: image + text -> generation
         ClipModel clip;
         clip_load(clip, mmproj, mp.n_gpu_layers);
-        sp.n_predict = n_predict;
         run_multimodal(llm, clip, image_path, prompt, sp, think);
         return 0;
     }
@@ -100,7 +99,7 @@ int main(int argc, char ** argv) {
 
     const int64_t t0 = ggml_time_us();
     int n_gen = 0;
-    std::string text = llm.generate(tokens, sp, [&](const std::string & piece) {
+    llm.generate(tokens, sp, [&](const std::string & piece) {
         printf("%s", piece.c_str()); fflush(stdout); n_gen++;
     });
     const int64_t t1 = ggml_time_us();

@@ -28,7 +28,6 @@ struct GgufFile {
     uint32_t    u32 (const std::string & key) const;
     int32_t     i32 (const std::string & key) const;
     float       f32 (const std::string & key) const;
-    bool        boolean(const std::string & key, bool dflt) const;
     float       f32_or(const std::string & key, float dflt) const;
 
     // arrays

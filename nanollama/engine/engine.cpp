@@ -125,7 +125,7 @@ void Engine::step() {
         }
         const float * logits = runner.decode_batch(db, /*s0=*/0, /*n_stream=*/hi, /*n_q=*/1, n_kv);
         const int n_vocab = runner.n_vocab();
-        // sample slots in parallel (independent), then emit serially (touches shared state)
+        // sample in parallel (independent), emit serially (shared state)
         const int n = (int) out.size();
         std::vector<int32_t> toks(n);
         pool->parallel_for(n, [&](int r) { toks[r] = out[r]->sampler.sample(logits + (size_t) r * n_vocab, n_vocab); });

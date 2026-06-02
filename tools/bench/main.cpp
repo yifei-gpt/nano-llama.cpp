@@ -56,10 +56,10 @@ int main(int argc, char ** argv) {
     }
 
     LLM llm; llm.load(mp, cp);
-    std::vector<int32_t> prompt(n_pp, 100);   // arbitrary tokens
+    std::vector<int32_t> prompt(n_pp, 100);
 
     printf("| backend | ngl | test | t/s |\n|---|---|---|---|\n");
-    const char * be = llm.runner.on_gpu ? "CUDA" : "CPU";   // actual backend, not just the flag
+    const char * be = llm.runner.on_gpu ? "CUDA" : "CPU";
 
     // ---- pp: process n_pp tokens in one forward ----
     for (int r = 0; r < n_rep; r++) {

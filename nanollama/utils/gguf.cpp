@@ -55,10 +55,6 @@ static float read_f32(const gguf_context * g, int64_t id, const char * key) {
 float GgufFile::f32(const std::string & key) const {
     return read_f32(gguf, find_or_abort(gguf, key), key.c_str());
 }
-bool GgufFile::boolean(const std::string & key, bool dflt) const {
-    int64_t id = gguf_find_key(gguf, key.c_str());
-    return id < 0 ? dflt : gguf_get_val_bool(gguf, id);
-}
 float GgufFile::f32_or(const std::string & key, float dflt) const {
     int64_t id = gguf_find_key(gguf, key.c_str());
     return id < 0 ? dflt : read_f32(gguf, id, key.c_str());

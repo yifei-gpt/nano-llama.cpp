@@ -24,10 +24,9 @@
 using namespace nano;
 using json = nlohmann::json;
 
-template <class T> struct Chan {   // tiny blocking queue
+template <class T> struct Chan {
     std::queue<T> q; std::mutex m; std::condition_variable cv;
     void push(T v) { { std::lock_guard<std::mutex> l(m); q.push(std::move(v)); } cv.notify_one(); }
-    T pop() { std::unique_lock<std::mutex> l(m); cv.wait(l, [&]{ return !q.empty(); }); T v = std::move(q.front()); q.pop(); return v; }
     bool pop_for(T & out, int ms) {
         std::unique_lock<std::mutex> l(m);
         if (!cv.wait_for(l, std::chrono::milliseconds(ms), [&]{ return !q.empty(); })) return false;

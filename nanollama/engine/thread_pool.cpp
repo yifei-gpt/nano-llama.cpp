@@ -1,4 +1,3 @@
-// thread_pool.cpp — see thread_pool.h
 #include "nanollama/engine/thread_pool.h"
 
 namespace nano {

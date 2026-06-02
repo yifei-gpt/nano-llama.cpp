@@ -22,7 +22,7 @@ struct LLM {
 
     const Vocab & get_vocab() const { return vocab; }
 
-    // generate greedily/sampled from prompt_tokens, calling on_piece() per token; returns the text
+    // generate from prompt; on_piece() per token; returns full text
     std::string generate(const std::vector<int32_t> & prompt_tokens,
                          const SamplingParams & sp,
                          const std::function<void(const std::string &)> & on_piece = nullptr);
