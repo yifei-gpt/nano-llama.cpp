@@ -54,10 +54,7 @@ bool Vocab::is_eog(int32_t id) const {
 std::vector<int32_t> Vocab::bpe_encode(const std::string & text) const {
     std::vector<int32_t> out;
     for (const std::string & word : unicode_regex_split(text, pretok_qwen35 ? QWEN35_REGEX : QWEN2_REGEX, true)) {
-        // ignore_merges: emit the whole pretoken if it is itself a vocab token
-        auto whole = token_to_id.find(word);
-        if (whole != token_to_id.end()) { out.push_back(whole->second); continue; }
-
+        // Qwen (qwen2/qwen35) does not use ignore_merges, so always run the merge loop
         struct Sym { int prev, next; std::string text; };
         std::vector<Sym> syms;
         for (size_t i = 0; i < word.size(); ) {
