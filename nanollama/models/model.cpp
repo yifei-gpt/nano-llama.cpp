@@ -10,6 +10,8 @@
 #include "ggml-cuda.h"
 #endif
 
+#include <fstream>
+
 namespace nano {
 
 Model::~Model() {
@@ -26,14 +28,13 @@ bool cuda_available() {
 #endif
 }
 
-// dequantize the n requested token-embedding rows into dst (F32)
 void Model::embed_tokens(const int32_t * ids, int n, float * dst) const {
     const auto    to_float = ggml_get_type_traits(embd_type)->to_float;
     const char *  base     = (const char *) embd_data;
     const int64_t n_vocab  = hparams.n_vocab;
     for (int i = 0; i < n; i++) {
         int64_t id = ids[i];
-        if (id < 0 || id >= n_vocab) id = 0;   // guard against out-of-range ids (avoid OOB read)
+        if (id < 0 || id >= n_vocab) id = 0;   // clamp OOB id
         to_float(base + (size_t) id * embd_row_bytes, dst + (size_t) i * hparams.n_embd, hparams.n_embd);
     }
 }
@@ -51,6 +52,21 @@ void load_embd(Model & m, ggml_tensor * tok_embd) {
         m.embd_data = m.embd_host.data();
     } else {
         m.embd_data = tok_embd->data;
+    }
+}
+
+void load_tensors(const std::string & path, const GgufFile & gf, const std::vector<ggml_tensor *> & tensors) {
+    std::ifstream fin(path, std::ios::binary);
+    if (!fin) NANO_ABORT("cannot reopen model file");
+    std::vector<char> staging;
+    for (ggml_tensor * t : tensors) {
+        if (!t) continue;
+        size_t nb = ggml_nbytes(t);
+        staging.resize(nb);
+        fin.seekg((std::streamoff) gf.tensor_file_offset(t->name));
+        fin.read(staging.data(), (std::streamsize) nb);
+        if (!fin) NANO_ABORT("short read for tensor %s", t->name);
+        ggml_backend_tensor_set(t, staging.data(), 0, nb);
     }
 }
 

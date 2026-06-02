@@ -13,7 +13,6 @@
 #endif
 
 #include <cmath>
-#include <fstream>
 #include <string>
 
 namespace nano {
@@ -83,8 +82,8 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
 
     model.tok_embd    = dup("token_embd.weight");
     model.output_norm = dup("output_norm.weight");
-    model.output      = dup("output.weight");        // separate LM head (e.g. Qwen3.5-27B)
-    if (!model.output) model.output = model.tok_embd; // tied embeddings (e.g. Qwen3.5-4B)
+    model.output      = dup("output.weight");        // untied LM head
+    if (!model.output) model.output = model.tok_embd; // tied embeddings
 
     model.layers.resize(hp.n_layer);
     char nm[128];
@@ -130,29 +129,14 @@ bool qwen35_load(qwen35_model & model, const ModelParams & mp) {
     if (!buf) NANO_ABORT("failed to allocate weight buffer");
     model.bufs.push_back(buf);
 
-    std::ifstream fin(mp.path, std::ios::binary);
-    if (!fin) NANO_ABORT("cannot reopen model file");
-    std::vector<char> staging;
-    auto load_one = [&](ggml_tensor * t) {
-        if (!t) return;
-        size_t off = gf.tensor_file_offset(t->name);
-        size_t nb  = ggml_nbytes(t);
-        staging.resize(nb);
-        fin.seekg((std::streamoff) off);
-        fin.read(staging.data(), (std::streamsize) nb);
-        if (!fin) NANO_ABORT("short read for tensor %s", t->name);
-        ggml_backend_tensor_set(t, staging.data(), 0, nb);
-    };
-    load_one(model.tok_embd);
-    if (model.output != model.tok_embd) load_one(model.output);   // separate (untied) LM head
-    load_one(model.output_norm);
-    for (auto & L : model.layers) {
-        for (ggml_tensor * t : { L.attn_norm, L.post_attn_norm, L.ffn_gate, L.ffn_up, L.ffn_down,
-                                 L.wq, L.wk, L.wv, L.wo, L.attn_q_norm, L.attn_k_norm,
-                                 L.wqkv, L.wqkv_gate, L.ssm_conv1d, L.ssm_dt, L.ssm_a,
-                                 L.ssm_alpha, L.ssm_beta, L.ssm_norm, L.ssm_out })
-            load_one(t);
-    }
+    std::vector<ggml_tensor *> tensors = { model.tok_embd, model.output_norm };
+    if (model.output != model.tok_embd) tensors.push_back(model.output);   // untied LM head
+    for (auto & L : model.layers)
+        tensors.insert(tensors.end(), { L.attn_norm, L.post_attn_norm, L.ffn_gate, L.ffn_up, L.ffn_down,
+                                        L.wq, L.wk, L.wv, L.wo, L.attn_q_norm, L.attn_k_norm,
+                                        L.wqkv, L.wqkv_gate, L.ssm_conv1d, L.ssm_dt, L.ssm_a,
+                                        L.ssm_alpha, L.ssm_beta, L.ssm_norm, L.ssm_out });
+    load_tensors(mp.path, gf, tensors);
 
     load_embd(model, model.tok_embd);
     NANO_LOG("model: loaded %d layers (%d recurrent, %d attention)",
@@ -172,7 +156,6 @@ static ggml_tensor * build_recurrent(ggml_context * ctx, ggml_cgraph * gf, const
     const float  eps = m.hparams.rms_eps;
     const size_t cnb = conv_cache->nb[1], snb = ssm_cache->nb[1], coff = (size_t) sl.s0 * cnb, soff = (size_t) sl.s0 * snb;
 
-    // projections + gates
     ggml_tensor * qkv = ggml_reshape_3d(ctx, linear(ctx, L.wqkv, cur), conv_ch, nq, ns);
     ggml_tensor * z   = linear(ctx, L.wqkv_gate, cur);
     ggml_tensor * beta = ggml_sigmoid(ctx, ggml_reshape_4d(ctx, linear(ctx, L.ssm_beta, cur), 1, nvh, nq, ns));
@@ -242,7 +225,7 @@ static ggml_tensor * build_attn_layer(ggml_context * ctx, ggml_cgraph * gf, cons
 
     ggml_tensor * att = build_attention(ctx, gf, Q, K, V, kv.k[il], kv.v[il], kv_idxs, mask, n_kv, sl,
                                         hd, nh, nkv, 1.0f / sqrtf((float) hd), flash);
-    att = ggml_mul(ctx, att, ggml_sigmoid(ctx, gate));   // gated attention
+    att = ggml_mul(ctx, att, ggml_sigmoid(ctx, gate));
     return linear(ctx, L.wo, att);
 }
 

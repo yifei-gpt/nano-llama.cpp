@@ -10,7 +10,7 @@
 
 namespace nano {
 
-// hyper-parameters common to every arch (arch-specific extras live in the subclass)
+// hparams common to every arch
 struct hparams_common {
     int32_t n_vocab   = 0;
     int32_t n_embd    = 0;
@@ -83,7 +83,9 @@ Model * load_model(const ModelParams & mp);
 
 // shared loader helpers (used by each arch's <arch>_load)
 struct GgufFile;
+struct GgufFile;
 bool cuda_available();                          // a usable CUDA device is present
 void load_embd(Model & m, ggml_tensor * tok_embd);   // set up the quantized token-embedding lookup for embed_tokens
+void load_tensors(const std::string & path, const GgufFile & gf, const std::vector<ggml_tensor *> & tensors);  // stream weights from the GGUF (skips nulls)
 
 } // namespace nano

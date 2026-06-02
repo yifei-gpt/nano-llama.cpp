@@ -15,7 +15,6 @@
 
 #include <cmath>
 #include <cstdio>
-#include <fstream>
 #include <string>
 
 namespace nano {
@@ -134,28 +133,12 @@ bool qwen3_load(qwen3_model & model, const ModelParams & mp) {
         model.bufs.push_back(rbuf);
     }
 
-    std::ifstream fin(mp.path, std::ios::binary);
-    if (!fin) NANO_ABORT("cannot reopen model file");
-    std::vector<char> staging;
-    auto load_one = [&](ggml_tensor * t) {
-        if (!t) return;
-        size_t off = gf.tensor_file_offset(t->name);
-        size_t nb  = ggml_nbytes(t);
-        staging.resize(nb);
-        fin.seekg((std::streamoff) off);
-        fin.read(staging.data(), (std::streamsize) nb);
-        if (!fin) NANO_ABORT("short read for tensor %s", t->name);
-        ggml_backend_tensor_set(t, staging.data(), 0, nb);
-    };
-    load_one(model.tok_embd);
-    load_one(model.output_norm);
-    if (!tied) load_one(model.output);
-    for (auto & L : model.layers) {
-        for (ggml_tensor * t : { L.attn_norm, L.wq, L.wk, L.wv, L.wo, L.attn_q_norm,
-                                 L.attn_k_norm, L.ffn_norm, L.ffn_gate, L.ffn_up, L.ffn_down }) {
-            load_one(t);
-        }
-    }
+    std::vector<ggml_tensor *> tensors = { model.tok_embd, model.output_norm };
+    if (!tied) tensors.push_back(model.output);
+    for (auto & L : model.layers)
+        tensors.insert(tensors.end(), { L.attn_norm, L.wq, L.wk, L.wv, L.wo, L.attn_q_norm,
+                                        L.attn_k_norm, L.ffn_norm, L.ffn_gate, L.ffn_up, L.ffn_down });
+    load_tensors(mp.path, gf, tensors);
 
     load_embd(model, model.tok_embd);
     NANO_LOG("model: loaded %d layers%s", hp.n_layer, tied ? " (tied embeddings)" : "");
@@ -196,7 +179,7 @@ ggml_tensor * qwen3_model::build_graph(ggml_context * ctx, ggml_cgraph * gf, con
                               in.mask, n_kv, sl, hd, n_head, n_head_kv, kq_scale, flash);
         cur = linear(ctx, L.wo, cur);
 
-        // last layer: keep only the rows that need logits, so the FFN/norm/lm-head skip the rest
+        // last layer: keep only rows that need logits
         if (il == hp.n_layer - 1 && in.out_ids) {
             cur   = ggml_get_rows(ctx, cur,   in.out_ids);
             inpSA = ggml_get_rows(ctx, inpSA, in.out_ids);
