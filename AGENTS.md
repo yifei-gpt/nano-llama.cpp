@@ -13,7 +13,7 @@ a ViT vision encoder for image input).
 
 | area | lines | what |
 |---|---|---|
-| `nanollama/models/` | 763 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
+| `nanollama/models/` | 764 | `model.*` (base + arch dispatch + shared loader helpers), `qwen3.*`, `qwen35.*` |
 | `nanollama/engine/` | 831 | `model_runner`, `kv_cache`, `recurrent_cache`, `thread_pool`, `llm`, `engine` |
 | `nanollama/vision/` | 491 | `image` (decode/resize), `clip` (ViT), `vlm` (splice + generate) |
 | `nanollama/layers/` | 201 | `attention`, `ops.h`, `sampler` |
@@ -79,6 +79,8 @@ cmake --build build -j --target nano-example   # rebuild one target while iterat
 
 New `.cpp` under `nanollama/` is compiled automatically (CMake globs it with `CONFIGURE_DEPENDS`) — no build-file edit. A new tool, though, needs its name added to the `foreach(tool ...)` list in `CMakeLists.txt`.
 
+The CPU backend builds `-march=native` (ggml's `GGML_NATIVE` is on by default), so a binary is pinned to the build host's ISA (AVX2/AVX-512) and `SIGILL`s on an older CPU — build on/for the target CPU, or pass `-DGGML_NATIVE=OFF` for a portable one.
+
 Verify **every** change:
 - **Correctness** — greedy (`--temp 0`) output and tokenizer ids must stay identical to a reference run on the same prompt; CPU and GPU should agree. For images, compare to `llama-mtmd-cli` (e.g. the headline must read "MEN WALK ON MOON").
 - **Speed** — `nano-bench -ngl 99` (`-np N` for batched throughput) and a concurrent run against `nano-server`; a regression usually means a broken invariant below.
@@ -92,11 +94,13 @@ Add `nanollama/models/<arch>.{h,cpp}` mirroring `qwen3.*` (or `qwen35.*` for a h
 1. Define a model struct subclassing `Model`, holding the weight `ggml_tensor*`s and any arch hparams.
    Override the traits you need: `n_pos_per_token()` (4 for M-RoPE), `is_recurrent_layer(il)`,
    `recurrent_conv_size()` / `recurrent_state_size()` (for SSM/linear-attention state).
-2. `<arch>_load(model, mp)`: read hparams via `gkey`/`arch_key` from GGUF; `dup()` each tensor by its
-   GGUF name into a model context; allocate with `ggml_backend_alloc_ctx_tensors_from_buft` (GPU when
-   `cuda_available()`); stream the data from the file; then `load_embd(model, model.tok_embd)` to wire up
-   the token-embedding lookup — `Model::embed_tokens()` dequantizes only the rows it needs (the GPU path
-   can't `get_rows` K-quant embeddings). `cuda_available()` and `load_embd()` are shared helpers in `model.cpp`.
+2. `<arch>_load(model, mp)`: read hparams via `gkey`/`arch_key` (in `common.h`) from GGUF; pre-size the
+   model context for your tensor count (`ggml_init` is sized by `n_tensors` — qwen3 uses `3 + n_layer*11`),
+   then `dup()` each tensor by its GGUF name into it; allocate with `ggml_backend_alloc_ctx_tensors_from_buft` (GPU when
+   `mp.n_gpu_layers > 0 && cuda_available()`); stream the data from the file; then `load_embd(model, model.tok_embd)`
+   to wire up the token-embedding lookup — `Model::embed_tokens()` dequantizes only the rows it needs (the GPU
+   path can't `get_rows` K-quant embeddings). `cuda_available()` and `load_embd()` are shared helpers in `model.cpp`.
+   If you copy qwen3's CPU Q4_K repack, dup `token_embd` with `allow_repack=false` (it's read raw — see Invariants).
 3. `<arch>_model::build_graph(...)`: write the forward pass with `layers/ops.h` + `build_attention`,
    gathering the output rows at the last layer (`out_ids`) so the final norm → lm-head run only on those.
    Match the reference op order exactly — norm placement, RoPE type/theta, attention scale, MLP shape —
@@ -189,6 +193,7 @@ Caches and scheduler:
 
 - **Single backend.** The whole graph runs on one backend; this is what lets ggml capture & replay a CUDA graph. Don't reintroduce a multi-backend scheduler without measuring tg speed.
 - **Host embedding lookup.** CUDA's `get_rows` can't read K-quant (e.g. Q6_K) embeddings, so `embed_tokens` dequantizes the needed rows on the host (no full F32 table) and feeds them as the graph's `embd` input. Keep new graphs free of GPU-unsupported ops.
+- **Never CPU-repack `token_embd`.** On CPU+AVX2 the qwen3 loader repacks Q4_K weight *matrices* into a `CPU_REPACK` buffer for faster matmul, but the embedding is read **raw** by host `embed_tokens`, so it's dup'd with `allow_repack=false`. Repacking it reorders the rows and silently corrupts every embedding (garbage output, no crash). Keep any new loader's `token_embd` out of the repack buffer.
 - **Stable graph topology.** Graphs are rebuilt into fixed buffers (`dec_mem`/`bat_mem`) so same-shape steps replay the captured CUDA graph. The shape is `n_kv` (padded to 256), plus — for batched decode — `n_stream` (active slots) and `n_q`: a steady set of running slots replays, while admitting/freeing re-captures. Changing shapes every step forfeits that speed.
 - **M-RoPE position ≠ sequence position.** For Qwen3.5 an image consumes `max(grid)` rope positions but many KV cells, so a slot tracks both `n_past` (KV cell) and `mrope_next` (rope position). The mask uses sequence positions; rope uses the 4-section M-RoPE positions.
 - **Match the reference numerically where it's cheap.** Greedy text is token-for-token identical to llama.cpp (CPU+GPU). Vision output can differ on low-confidence tokens (independent ViT fp accumulation) but the algorithm — grid, token count, M-RoPE, flash-attn — must match.
