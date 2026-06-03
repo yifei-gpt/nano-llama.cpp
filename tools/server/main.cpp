@@ -217,6 +217,7 @@ int main(int argc, char ** argv) {
         if (!stream) {
             int n_completion = 0;
             std::string text = collect(r, n_completion, [&]{ return req.is_connection_closed(); });
+            text.resize(complete_utf8_len(text));   // drop a trailing partial multibyte char (json dump rejects invalid UTF-8)
             json msg = chat
                 ? json{{"id",id},{"object","chat.completion"},{"created",created},{"model",g_model_name},
                        {"choices",{{{"index",0},{"message",{{"role","assistant"},{"content",text}}},{"finish_reason",r->finish_reason}}}},
@@ -248,6 +249,7 @@ int main(int argc, char ** argv) {
                     out = content_chunk(pending->substr(0, k));
                     pending->erase(0, k);
                 } else {
+                    pending->resize(complete_utf8_len(*pending));   // drop a trailing partial multibyte char
                     if (!pending->empty()) out = content_chunk(*pending);
                     json fin = chat
                         ? json{{"id",id},{"object","chat.completion.chunk"},{"created",created},{"model",g_model_name},
